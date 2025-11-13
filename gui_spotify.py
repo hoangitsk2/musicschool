@@ -11,16 +11,16 @@ from tkinter import END, filedialog, messagebox
 
 import requests
 import ttkbootstrap as ttk
-from ttkbootstrap.constants import BOTH, E, HORIZONTAL, LEFT, RIGHT, TOP, W, X, Y
+from ttkbootstrap.constants import BOTH, E, EW, HORIZONTAL, LEFT, NW, RIGHT, TOP, W, X, Y
 
 DEFAULT_API_BASE = os.environ.get("AUTO_BREAK_PLAYER_API", "http://127.0.0.1:8000/api")
 
 
 class SpotifyStyleGUI(ttk.Window):
     def __init__(self, api_base: str = DEFAULT_API_BASE) -> None:
-        super().__init__(themename="darkly")
-        self.title("auto_break_player controller")
-        self.geometry("820x720")
+        super().__init__(themename="minty")
+        self.title("Campus Break DJ")
+        self.geometry("860x760")
         self.playlists: list[dict[str, object]] = []
         self.tracks: list[dict[str, object]] = []
         self.playlist_entries: dict[int, list[dict[str, object]]] = {}
@@ -48,10 +48,17 @@ class SpotifyStyleGUI(ttk.Window):
         title = ttk.Label(
             container,
             text="Break Session Studio",
-            font=("Inter", 24, "bold"),
+            font=("Inter", 26, "bold"),
             bootstyle="inverse",
         )
-        title.pack(pady=(0, 12))
+        title.pack(pady=(0, 4))
+        subtitle = ttk.Label(
+            container,
+            text="Âm nhạc giờ ra chơi cho học sinh vui vẻ và đúng lịch",
+            font=("Inter", 12),
+            bootstyle="info",
+        )
+        subtitle.pack(pady=(0, 12))
 
         self.notebook = ttk.Notebook(container, bootstyle="dark")
         self.notebook.pack(fill=BOTH, expand=True)
@@ -242,11 +249,11 @@ class SpotifyStyleGUI(ttk.Window):
 
         ttk.Label(form, text="Schedule name", font=("Inter", 11, "bold")).grid(row=0, column=0, sticky=W)
         self.schedule_name_entry = ttk.Entry(form)
-        self.schedule_name_entry.grid(row=0, column=1, sticky=W + X, padx=(8, 0))
+        self.schedule_name_entry.grid(row=0, column=1, sticky=EW, padx=(8, 0))
 
         ttk.Label(form, text="Playlist", font=("Inter", 11, "bold")).grid(row=1, column=0, sticky=W, pady=(6, 0))
         self.schedule_playlist_combo = ttk.Combobox(form, bootstyle="dark", state="readonly")
-        self.schedule_playlist_combo.grid(row=1, column=1, sticky=W + X, padx=(8, 0), pady=(6, 0))
+        self.schedule_playlist_combo.grid(row=1, column=1, sticky=EW, padx=(8, 0), pady=(6, 0))
 
         ttk.Label(form, text="Days", font=("Inter", 11, "bold")).grid(row=2, column=0, sticky=NW, pady=(6, 0))
         days_frame = ttk.Frame(form)
@@ -262,7 +269,7 @@ class SpotifyStyleGUI(ttk.Window):
             ("6", "Sat"),
         ]
         for value, label in day_labels:
-            var = ttk.BooleanVar(value=value in {"0", "1", "2", "3", "4"})
+            var = ttk.BooleanVar(value=value in {"1", "2", "3", "4", "5"})
             self.schedule_day_vars[value] = var
             ttk.Checkbutton(days_frame, text=label, variable=var, bootstyle="secondary-toolbutton").pack(
                 side=LEFT, padx=2
@@ -270,13 +277,13 @@ class SpotifyStyleGUI(ttk.Window):
 
         ttk.Label(form, text="Start HH:MM", font=("Inter", 11, "bold")).grid(row=3, column=0, sticky=W, pady=(6, 0))
         self.schedule_time_entry = ttk.Entry(form)
-        self.schedule_time_entry.insert(0, "08:00")
-        self.schedule_time_entry.grid(row=3, column=1, sticky=W + X, padx=(8, 0), pady=(6, 0))
+        self.schedule_time_entry.insert(0, "09:30")
+        self.schedule_time_entry.grid(row=3, column=1, sticky=EW, padx=(8, 0), pady=(6, 0))
 
         ttk.Label(form, text="Minutes", font=("Inter", 11, "bold")).grid(row=4, column=0, sticky=W, pady=(6, 0))
         self.schedule_minutes_entry = ttk.Entry(form)
-        self.schedule_minutes_entry.insert(0, "20")
-        self.schedule_minutes_entry.grid(row=4, column=1, sticky=W + X, padx=(8, 0), pady=(6, 0))
+        self.schedule_minutes_entry.insert(0, "15")
+        self.schedule_minutes_entry.grid(row=4, column=1, sticky=EW, padx=(8, 0), pady=(6, 0))
 
         ttk.Checkbutton(form, text="Enabled", variable=self.schedule_enabled, bootstyle="success").grid(
             row=5, column=1, sticky=W, pady=(6, 0)
@@ -313,6 +320,42 @@ class SpotifyStyleGUI(ttk.Window):
             bootstyle="secondary",
             command=self.on_toggle_schedule,
         ).pack(anchor=E, pady=6)
+
+        planner = ttk.Labelframe(parent, text="School break planner", padding=12, bootstyle="success")
+        planner.pack(fill=X, pady=(4, 0))
+        planner.columnconfigure(1, weight=1)
+
+        ttk.Label(planner, text="Tên nhóm lịch", font=("Inter", 11, "bold")).grid(row=0, column=0, sticky=W)
+        self.break_prefix_entry = ttk.Entry(planner)
+        self.break_prefix_entry.insert(0, "Giờ ra chơi")
+        self.break_prefix_entry.grid(row=0, column=1, sticky=EW, padx=(8, 0))
+
+        ttk.Label(planner, text="Thời gian bắt đầu (HH:MM)", font=("Inter", 11, "bold")).grid(
+            row=1, column=0, sticky=NW, pady=(8, 0)
+        )
+        self.break_times_entry = ttk.Entry(planner)
+        self.break_times_entry.insert(0, "09:30, 15:30")
+        self.break_times_entry.grid(row=1, column=1, sticky=EW, padx=(8, 0), pady=(8, 0))
+
+        ttk.Label(planner, text="Số phút mỗi phiên", font=("Inter", 11, "bold")).grid(row=2, column=0, sticky=W, pady=(8, 0))
+        self.break_minutes_spin = ttk.Spinbox(planner, from_=5, to=60, width=6)
+        self.break_minutes_spin.set("15")
+        self.break_minutes_spin.grid(row=2, column=1, sticky=W, padx=(8, 0), pady=(8, 0))
+
+        self.break_replace_var = ttk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            planner,
+            text="Vô hiệu hoá lịch cũ cùng nhóm",
+            variable=self.break_replace_var,
+            bootstyle="warning",
+        ).grid(row=3, column=1, sticky=W, padx=(8, 0), pady=(4, 0))
+
+        ttk.Button(
+            planner,
+            text="Tạo kế hoạch giờ ra chơi",
+            bootstyle="success-outline",
+            command=self.on_create_break_plan,
+        ).grid(row=4, column=1, sticky=E, pady=(10, 0))
 
     # ------------------------------------------------------------------
     def refresh_playlists(self) -> None:
@@ -673,6 +716,37 @@ class SpotifyStyleGUI(ttk.Window):
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
 
+    def on_create_break_plan(self) -> None:
+        playlist_id = self._playlist_id_from_name(self.schedule_playlist_combo.get()) if hasattr(
+            self, "schedule_playlist_combo"
+        ) else None
+        if playlist_id is None:
+            messagebox.showwarning("School break", "Chọn playlist để phát trong giờ ra chơi")
+            return
+        raw_times = (self.break_times_entry.get() if hasattr(self, "break_times_entry") else "").replace("\n", ",")
+        try:
+            times = self._parse_times(raw_times)
+        except ValueError as exc:
+            messagebox.showerror("School break", str(exc))
+            return
+        prefix = self.break_prefix_entry.get().strip() if hasattr(self, "break_prefix_entry") else ""
+        payload = {
+            "playlist_id": playlist_id,
+            "start_times": times,
+            "session_minutes": self._parse_int(self.break_minutes_spin.get(), 15)
+            if hasattr(self, "break_minutes_spin")
+            else 15,
+            "days": [day for day, var in getattr(self, "schedule_day_vars", {}).items() if var.get()],
+            "name_prefix": prefix or "Giờ ra chơi",
+            "replace": bool(self.break_replace_var.get()) if hasattr(self, "break_replace_var") else False,
+        }
+        try:
+            self._api_request("POST", "schedules/break-plan", json=payload)
+            self._load_schedules()
+            messagebox.showinfo("School break", "Đã cập nhật kế hoạch giờ ra chơi 15 phút cho học sinh.")
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc))
+
     def on_play(self) -> None:
         playlist_id = self._selected_playlist_id()
         if playlist_id is None:
@@ -761,6 +835,23 @@ class SpotifyStyleGUI(ttk.Window):
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _parse_times(value: str) -> list[str]:
+        parts = []
+        for chunk in value.replace(";", ",").split(","):
+            token = chunk.strip()
+            if not token:
+                continue
+            try:
+                time.strptime(token, "%H:%M")
+            except ValueError as exc:
+                raise ValueError(f"Thời gian không hợp lệ: {token}") from exc
+            if token not in parts:
+                parts.append(token)
+        if not parts:
+            raise ValueError("Nhập ít nhất một thời gian bắt đầu ở định dạng HH:MM")
+        return parts
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from config import load_config
-from models import Base, Command, Playlist, PlaylistTrack, Track, ensure_state_row, make_engine
+from models import Base, Command, Playlist, PlaylistTrack, Schedule, Track, ensure_state_row, make_engine
 from player import CVLCPlayer, DummyPlayer, make_player
 from sqlalchemy import select
 
@@ -227,3 +227,40 @@ def test_api_schedule_management(app_module, client):
 
     toggle_response = client.post(f"/api/schedules/{schedule_id}/toggle")
     assert toggle_response.status_code == 200
+
+
+def test_break_plan_helper_and_api(app_module, client):
+    with app_module.SessionLocal() as session:
+        playlist = _add_playlist(session, "Recess")
+        track = _add_track(session, "bell.mp3")
+        _link_track(session, playlist, track)
+        result = app_module.apply_break_plan(
+            session,
+            playlist.id,
+            start_times=["09:30", "15:30"],
+            days=["1", "2", "3", "4", "5"],
+            minutes=15,
+            name_prefix="Recess",
+            replace=True,
+        )
+        assert len(result["created"]) == 2
+        created_ids = set(result["created"])  # noqa: F841 - ensure not empty
+
+    response = client.post(
+        "/api/schedules/break-plan",
+        json={
+            "playlist_id": playlist.id,
+            "start_times": ["09:30"],
+            "session_minutes": 20,
+            "days": ["1", "2", "3", "4", "5"],
+            "name_prefix": "Recess",
+            "replace": True,
+        },
+    )
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["updated"]
+
+    with app_module.SessionLocal() as session:
+        schedules = session.scalars(select(Schedule)).all()
+        assert any(not sched.enabled for sched in schedules if sched.start_time == "15:30")

@@ -5,7 +5,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, List, Optional
 from uuid import uuid4
 
 from flask import (
@@ -133,6 +133,132 @@ def enqueue_command(session, type_: str, payload: Optional[Dict[str, object]] = 
     command = Command(type=type_, payload=json.dumps(payload or {}))
     session.add(command)
     session.commit()
+
+
+def _normalize_days(days: Iterable[object]) -> List[str]:
+    normalized = []
+    for day in days:
+        if day is None:
+            continue
+        value = str(day).strip()
+        if value == "":
+            continue
+        if value not in {"0", "1", "2", "3", "4", "5", "6"}:
+            raise ValueError("Day values must be between 0 (Monday) and 6 (Sunday)")
+        normalized.append(value)
+    if not normalized:
+        return ["1", "2", "3", "4", "5"]  # default to school days Mon-Fri
+    # remove duplicates while preserving order
+    seen: set[str] = set()
+    unique: List[str] = []
+    for value in normalized:
+        if value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _parse_start_times(raw_times: Iterable[object]) -> List[str]:
+    parsed: List[str] = []
+    for item in raw_times:
+        if item is None:
+            continue
+        value = str(item).strip()
+        if not value:
+            continue
+        try:
+            dt.datetime.strptime(value, "%H:%M")
+        except ValueError as exc:  # pragma: no cover - validated by caller tests
+            raise ValueError(f"Invalid time format '{value}', expected HH:MM") from exc
+        if value not in parsed:
+            parsed.append(value)
+    if not parsed:
+        raise ValueError("At least one start time is required")
+    return parsed
+
+
+def apply_break_plan(
+    session,
+    playlist_id: int,
+    *,
+    start_times: Iterable[object],
+    days: Iterable[object] | None = None,
+    minutes: int | None = None,
+    name_prefix: str | None = None,
+    replace: bool = False,
+):
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        raise ValueError("Playlist not found")
+    times = _parse_start_times(start_times)
+    normalized_days = _normalize_days(days or [])
+    minutes_value = max(1, minutes or int(config.get("session_default_minutes", 15)))
+    prefix = (name_prefix or "School Break").strip() or "School Break"
+    created: List[int] = []
+    updated: List[int] = []
+
+    day_csv = ",".join(normalized_days)
+    for start in times:
+        schedule = session.scalar(
+            select(Schedule).where(
+                Schedule.playlist_id == playlist_id,
+                Schedule.start_time == start,
+            )
+        )
+        if schedule:
+            schedule.name = f"{prefix} {start}"
+            schedule.days = day_csv
+            schedule.session_minutes = minutes_value
+            schedule.enabled = True
+            updated.append(schedule.id)
+        else:
+            schedule = Schedule(
+                name=f"{prefix} {start}",
+                playlist_id=playlist_id,
+                days=day_csv,
+                start_time=start,
+                session_minutes=minutes_value,
+                enabled=True,
+            )
+            session.add(schedule)
+            session.flush()
+            created.append(schedule.id)
+
+    disabled: List[int] = []
+    if replace:
+        keep_ids = set(created + updated)
+        stmt = select(Schedule).where(
+            Schedule.playlist_id == playlist_id,
+            Schedule.name.like(f"{prefix}%"),
+        )
+        if keep_ids:
+            stmt = stmt.where(~Schedule.id.in_(list(keep_ids)))
+        for schedule in session.scalars(stmt).all():
+            if schedule.enabled:
+                schedule.enabled = False
+                disabled.append(schedule.id)
+
+    session.commit()
+    log(
+        session,
+        "info",
+        "Break plan applied",
+        {
+            "playlist_id": playlist_id,
+            "created": created,
+            "updated": updated,
+            "disabled": disabled,
+            "start_times": times,
+        },
+    )
+    return {
+        "created": created,
+        "updated": updated,
+        "disabled": disabled,
+        "days": day_csv,
+        "minutes": minutes_value,
+        "prefix": prefix,
+    }
 
 
 # ----------------------------------------------------------------------------
@@ -294,6 +420,37 @@ def schedules_view() -> str | Response:
     playlists = session.scalars(select(Playlist)).all()
     schedules = session.scalars(select(Schedule)).all()
     return render_template("schedules.html", playlists=playlists, schedules=schedules, config=config)
+
+
+@app.route("/schedules/break-plan", methods=["POST"])
+def schedules_break_plan() -> Response:
+    session = get_session()
+    playlist_id = to_int(request.form.get("playlist_id"))
+    if playlist_id is None:
+        flash("Cần chọn playlist cho kế hoạch giờ ra chơi.", "error")
+        return redirect(url_for("schedules_view"))
+    minutes = to_int(request.form.get("session_minutes"), config.get("session_default_minutes", 15))
+    days = request.form.getlist("days")
+    start_times_raw = request.form.get("start_times", "")
+    prefix = (request.form.get("name_prefix") or "").strip()
+    replace = bool(request.form.get("replace"))
+    try:
+        result = apply_break_plan(
+            session,
+            int(playlist_id),
+            start_times=start_times_raw.replace("\n", ",").split(","),
+            days=days,
+            minutes=minutes,
+            name_prefix=prefix,
+            replace=replace,
+        )
+        flash(
+            f"Kế hoạch giờ ra chơi đã cập nhật: {len(result['created'])} mới, {len(result['updated'])} cập nhật.",
+            "success",
+        )
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("schedules_view"))
 
 
 @app.route("/schedules/<int:schedule_id>/toggle", methods=["POST"])
@@ -547,6 +704,61 @@ def api_schedules() -> Response:
             }
             for schedule in schedules
         ]
+    )
+
+
+@app.route("/api/schedules/break-plan", methods=["POST"])
+def api_break_plan() -> Response:
+    session = get_session()
+    data = get_data()
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid payload"}), 400
+    playlist_id = to_int(data.get("playlist_id"))
+    if playlist_id is None:
+        return jsonify({"error": "playlist_id required"}), 400
+    start_times_value = data.get("start_times")
+    if isinstance(start_times_value, str):
+        raw_times = start_times_value.replace("\n", ",").split(",")
+    elif isinstance(start_times_value, list):
+        raw_times = start_times_value
+    else:
+        raw_times = []
+    days_value = data.get("days")
+    if isinstance(days_value, str):
+        days = [item.strip() for item in days_value.split(",") if item.strip()]
+    elif isinstance(days_value, list):
+        days = days_value
+    else:
+        days = []
+    minutes = to_int(data.get("session_minutes"), config.get("session_default_minutes", 15))
+    prefix = data.get("name_prefix")
+    replace = bool(data.get("replace"))
+    try:
+        result = apply_break_plan(
+            session,
+            int(playlist_id),
+            start_times=raw_times,
+            days=days,
+            minutes=minutes,
+            name_prefix=prefix,
+            replace=replace,
+        )
+    except ValueError as exc:
+        session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "created": result["created"],
+                "updated": result["updated"],
+                "disabled": result["disabled"],
+                "days": result["days"],
+                "session_minutes": result["minutes"],
+                "name_prefix": result["prefix"],
+            }
+        ),
+        201,
     )
 
 
