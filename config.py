@@ -19,6 +19,7 @@ DEFAULTS: Dict[str, Any] = {
     "vlc_backend": "auto",
     "volume_default": 70,
     "session_default_minutes": 15,
+    "cors_origins": ["*"],
     "gpio": {
         "enabled": True,
         "relay_pin": 17,

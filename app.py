@@ -54,6 +54,10 @@ app.config["ALLOWED_EXTENSIONS"] = set(config.get("allowed_extensions", [".mp3",
 Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 Path(config["logs_dir"]).mkdir(parents=True, exist_ok=True)
 
+_CORS_METHODS = "GET,POST,DELETE,OPTIONS"
+_CORS_HEADERS = "Content-Type"
+_CORS_ORIGINS = tuple(config.get("cors_origins", ["*"]))
+
 engine = make_engine(config["db_path"])
 Base.metadata.create_all(engine)
 SessionLocal = make_session_factory(engine)
@@ -75,6 +79,39 @@ def shutdown_session(exception=None):  # pragma: no cover - cleanup
     session = g.pop("db", None)
     if session is not None:
         session.close()
+
+
+# ----------------------------------------------------------------------------
+
+
+@app.before_request
+def _handle_cors_preflight():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return _apply_cors_headers(response)
+
+
+def _apply_cors_headers(response: Response) -> Response:
+    origin = request.headers.get("Origin") or ""
+    allow_all = "*" in _CORS_ORIGINS
+    if allow_all:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin in _CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        existing_vary = response.headers.get("Vary")
+        if existing_vary:
+            if "Origin" not in {item.strip() for item in existing_vary.split(",")}:
+                response.headers["Vary"] = f"{existing_vary}, Origin"
+        else:
+            response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
+    response.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+    return response
+
+
+@app.after_request
+def _add_cors_headers(response: Response) -> Response:
+    return _apply_cors_headers(response)
 
 
 # ----------------------------------------------------------------------------

@@ -25,6 +25,28 @@ def test_config_load():
     assert "session_default_minutes" in cfg
 
 
+def test_cors_allows_any_origin(app_module, client):
+    response = client.options("/api/status", headers={"Origin": "https://example.com"})
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "*"
+    assert "GET" in response.headers["Access-Control-Allow-Methods"]
+    assert response.headers["Access-Control-Allow-Headers"] == "Content-Type"
+
+
+def test_cors_restricts_to_configured_origins(app_module, client):
+    original_origins = app_module._CORS_ORIGINS
+    try:
+        app_module._CORS_ORIGINS = ("https://allowed.example",)
+        disallowed = client.get("/api/status", headers={"Origin": "https://blocked.example"})
+        assert "Access-Control-Allow-Origin" not in disallowed.headers
+
+        allowed = client.get("/api/status", headers={"Origin": "https://allowed.example"})
+        assert allowed.headers["Access-Control-Allow-Origin"] == "https://allowed.example"
+        assert "Origin" in allowed.headers.get("Vary", "")
+    finally:
+        app_module._CORS_ORIGINS = original_origins
+
+
 def test_player_dummy():
     player = DummyPlayer()
     player.load_playlist(["track1.mp3", "track2.mp3"])
