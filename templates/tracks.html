@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+{% block title %}Tracks • auto_break_player{% endblock %}
+{% block content %}
+<div class="grid gap-8 lg:grid-cols-2">
+  <div class="card bg-base-100 shadow">
+    <div class="card-body space-y-4">
+      <h2 class="card-title">Upload tracks</h2>
+      <form method="post" enctype="multipart/form-data" class="space-y-4">
+        <input type="file" name="files" multiple class="file-input file-input-bordered w-full" />
+        <button class="btn btn-primary" type="submit">Upload</button>
+      </form>
+      <p class="text-sm opacity-70">Allowed extensions: {{ config.allowed_extensions | join(', ') }}</p>
+    </div>
+  </div>
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Tracks ({{ tracks|length }})</h2>
+      <div class="overflow-x-auto mt-4">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Duration</th>
+              <th>Preview</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for track in tracks %}
+              <tr>
+                <td>{{ track.orig_filename }}</td>
+                <td>{{ track.duration_sec or '—' }}</td>
+                <td>
+                  <audio controls class="w-48">
+                    <source src="{{ url_for('serve_music', filename=track.stored_filename) }}" type="{{ track.content_type or 'audio/mpeg' }}" />
+                    Your browser does not support audio playback.
+                  </audio>
+                  <button class="btn btn-xs btn-primary mt-2" type="button" data-preview="{{ track.id }}">
+                    Play on system
+                  </button>
+                </td>
+                <td>
+                  <form method="post" action="{{ url_for('delete_track', track_id=track.id) }}">
+                    <button class="btn btn-xs btn-outline" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4" class="text-center opacity-70">No tracks uploaded yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

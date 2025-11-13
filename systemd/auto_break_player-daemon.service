@@ -1,0 +1,15 @@
+[Unit]
+Description=auto_break_player playback daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/auto_break_player
+Environment="PATH=/home/pi/auto_break_player/.venv/bin"
+ExecStart=/home/pi/auto_break_player/.venv/bin/python playback_daemon.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

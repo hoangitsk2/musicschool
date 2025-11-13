@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}auto_break_player{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+      }
+    </style>
+    {% block head %}{% endblock %}
+  </head>
+  <body class="bg-base-200 text-base-content min-h-screen">
+    <div class="drawer md:drawer-open">
+      <input id="sidebar" type="checkbox" class="drawer-toggle" />
+      <div class="drawer-content flex flex-col">
+        <div class="navbar bg-base-300/80 backdrop-blur sticky top-0 z-20">
+          <div class="flex-none md:hidden">
+            <label for="sidebar" class="btn btn-ghost btn-square">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="w-6 h-6"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.75 5.25h16.5M3.75 12h16.5m-16.5 6.75h16.5"
+                />
+              </svg>
+            </label>
+          </div>
+          <div class="flex-1">
+            <a href="{{ url_for('index') }}" class="btn btn-ghost normal-case text-xl">auto_break_player</a>
+          </div>
+          <div class="flex-none space-x-2">
+            <a href="{{ url_for('upload') }}" class="btn btn-ghost">Tracks</a>
+            <a href="{{ url_for('playlists') }}" class="btn btn-ghost">Playlists</a>
+            <a href="{{ url_for('schedules_view') }}" class="btn btn-ghost">Schedules</a>
+          </div>
+        </div>
+        <main class="flex-1 p-4 md:p-8">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              <div class="space-y-2 mb-4">
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ 'error' if category == 'error' else ('success' if category == 'success' else 'info') }}">
+                    <span>{{ message }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endwith %}
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+      <div class="drawer-side">
+        <label for="sidebar" class="drawer-overlay"></label>
+        <ul class="menu p-4 w-64 min-h-full bg-base-300/90 backdrop-blur">
+          <li class="menu-title">Navigation</li>
+          <li><a href="{{ url_for('index') }}">Dashboard</a></li>
+          <li><a href="{{ url_for('upload') }}">Tracks</a></li>
+          <li><a href="{{ url_for('playlists') }}">Playlists</a></li>
+          <li><a href="{{ url_for('schedules_view') }}">Schedules</a></li>
+        </ul>
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

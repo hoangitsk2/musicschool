@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+{% block title %}Schedules • auto_break_player{% endblock %}
+{% block content %}
+<div class="grid gap-8 lg:grid-cols-2">
+  <div class="card bg-base-100 shadow">
+    <div class="card-body space-y-4">
+      <h2 class="card-title">New schedule</h2>
+      <form method="post" class="grid gap-4">
+        <label class="form-control">
+          <div class="label"><span class="label-text">Name</span></div>
+          <input type="text" name="name" class="input input-bordered" placeholder="Morning break" />
+        </label>
+        <label class="form-control">
+          <div class="label"><span class="label-text">Playlist</span></div>
+          <select name="playlist_id" class="select select-bordered" required>
+            <option value="" disabled selected>Select playlist</option>
+            {% for playlist in playlists %}
+              <option value="{{ playlist.id }}">{{ playlist.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="form-control">
+          <div class="label"><span class="label-text">Days (0=Mon .. 6=Sun)</span></div>
+          <div class="flex flex-wrap gap-2">
+            {% for day in range(7) %}
+              <label class="label cursor-pointer">
+                <span class="label-text mr-2">{{ day }}</span>
+                <input type="checkbox" name="days" value="{{ day }}" class="checkbox checkbox-sm" checked />
+              </label>
+            {% endfor %}
+          </div>
+        </label>
+        <label class="form-control">
+          <div class="label"><span class="label-text">Start time</span></div>
+          <input type="time" name="start_time" class="input input-bordered" value="08:00" />
+        </label>
+        <label class="form-control">
+          <div class="label"><span class="label-text">Session minutes</span></div>
+          <input type="number" name="session_minutes" class="input input-bordered" value="{{ config.session_default_minutes }}" />
+        </label>
+        <label class="flex items-center gap-3">
+          <input type="checkbox" name="enabled" class="toggle toggle-primary" checked />
+          <span>Enabled</span>
+        </label>
+        <button class="btn btn-primary" type="submit">Save schedule</button>
+      </form>
+    </div>
+  </div>
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Existing schedules</h2>
+      <div class="overflow-x-auto mt-4">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Playlist</th>
+              <th>Days</th>
+              <th>Start</th>
+              <th>Minutes</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for schedule in schedules %}
+              <tr>
+                <td>{{ schedule.name }}</td>
+                <td>{{ schedule.playlist.name if schedule.playlist else '—' }}</td>
+                <td>{{ schedule.days }}</td>
+                <td>{{ schedule.start_time }}</td>
+                <td>{{ schedule.session_minutes }}</td>
+                <td>
+                  <form method="post" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}">
+                    <button class="btn btn-xs {{ 'btn-success' if schedule.enabled else 'btn-outline' }}" type="submit">
+                      {{ 'Enabled' if schedule.enabled else 'Disabled' }}
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="6" class="text-center opacity-70">No schedules yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

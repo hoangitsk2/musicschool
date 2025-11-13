@@ -1,0 +1,15 @@
+[Unit]
+Description=auto_break_player Flask service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/auto_break_player
+Environment="PATH=/home/pi/auto_break_player/.venv/bin"
+ExecStart=/home/pi/auto_break_player/.venv/bin/gunicorn -w 2 -b 0.0.0.0:8000 app:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

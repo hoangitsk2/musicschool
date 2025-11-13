@@ -1,0 +1,20 @@
+# Example configuration for auto_break_player
+secret_key: change-me
+host: 0.0.0.0
+port: 8000
+db_path: auto_break_player.db
+music_dir: music
+logs_dir: logs
+max_upload_mb: 100
+allowed_extensions:
+  - .mp3
+  - .wav
+vlc_backend: auto
+volume_default: 70
+session_default_minutes: 15
+gpio:
+  enabled: true
+  relay_pin: 17
+  active_high: true
+ui:
+  theme: dark
