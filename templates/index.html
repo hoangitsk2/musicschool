@@ -1,6 +1,23 @@
 {% extends "layout.html" %}
 {% block title %}Dashboard • auto_break_player{% endblock %}
 {% block content %}
+<section class="hero-aurora text-white p-8 mb-8">
+  <div class="relative z-10 space-y-4 max-w-3xl">
+    <p class="uppercase tracking-widest text-sm/relaxed text-white/80">Auto break studio</p>
+    <h1 class="text-3xl md:text-4xl font-bold">Điều khiển toàn bộ âm nhạc và lịch trình chỉ trong một nơi</h1>
+    <p class="text-white/80 text-base md:text-lg">
+      Theo dõi trạng thái phiên phát, quản lý playlist, tạo lịch và kích hoạt xem trước nhanh chóng như trên giao diện web.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <a href="{{ url_for('playlists') }}" class="btn btn-primary btn-sm md:btn-md">Quản lý playlist</a>
+      <a href="{{ url_for('schedules_view') }}" class="btn btn-outline btn-sm md:btn-md">Lịch tự động</a>
+      <span class="badge badge-success badge-outline text-sm md:text-base">
+        Đang phát: {{ current_track.orig_filename if current_track else '—' }}
+      </span>
+    </div>
+  </div>
+</section>
+
 <section class="grid gap-6 lg:grid-cols-3">
   <div class="stats shadow bg-base-100 col-span-1">
     <div class="stat">

@@ -1,9 +1,12 @@
 """Playback backends for auto_break_player."""
 from __future__ import annotations
 
+import os
 import queue
+import shutil
 import subprocess
 import threading
+from pathlib import Path
 from typing import List, Optional
 
 
@@ -144,6 +147,47 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
         self._thread: Optional[threading.Thread] = None
         self._playing = False
         self._volume = 70
+        self._binary = self._resolve_binary()
+
+    def _resolve_binary(self) -> str:
+        """Locate a VLC-compatible executable on the current platform."""
+
+        candidates: list[str] = []
+
+        env_candidates = [
+            os.environ.get("CVLC_PATH"),
+            os.environ.get("VLC_BINARY"),
+        ]
+        candidates.extend([value for value in env_candidates if value])
+
+        if os.name == "nt":
+            program_files = [
+                os.environ.get("ProgramFiles"),
+                os.environ.get("ProgramFiles(x86)"),
+            ]
+            for base in program_files:
+                if not base:
+                    continue
+                win_path = Path(base) / "VideoLAN" / "VLC" / "vlc.exe"
+                candidates.append(str(win_path))
+            candidates.extend(["vlc.exe", "vlc", "cvlc"])
+        else:
+            candidates.append("cvlc")
+            candidates.append("vlc")
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            candidate_path = Path(candidate)
+            if candidate_path.exists():
+                return str(candidate_path)
+            resolved = shutil.which(candidate)
+            if resolved:
+                return resolved
+
+        raise RuntimeError(
+            "Unable to locate VLC executable. Set CVLC_PATH or install VLC in the default location."
+        )
 
     def _ensure_thread(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -185,7 +229,7 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
         if not self._files:
             return
         args = [
-            "cvlc",
+            self._binary,
             "--quiet",
             "--extraintf",
             "rc",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import io
 import sys
 from pathlib import Path
 
@@ -37,7 +38,10 @@ def test_player_dummy():
     assert isinstance(auto_player, DummyPlayer)
 
 
-def test_player_cvlc_instantiation():
+def test_player_cvlc_instantiation(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc"
+    fake_vlc.write_text("#!/bin/sh\nexit 0\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
     player = make_player("cvlc")
     assert isinstance(player, CVLCPlayer)
 
@@ -159,3 +163,67 @@ def test_api_tracks_and_preview(app_module, client):
             select(Command).where(Command.type == "PREVIEW").order_by(Command.created_at.desc())
         ).first()
         assert command is not None
+
+
+def test_api_tracks_upload_and_delete(app_module, client):
+    data = {
+        "files": (io.BytesIO(b"fake data"), "upload.mp3"),
+    }
+    response = client.post("/api/tracks", data=data, content_type="multipart/form-data")
+    assert response.status_code == 201
+    data = response.get_json()
+    uploaded = data["uploaded"][0]
+
+    delete_response = client.delete(f"/api/tracks/{uploaded['id']}")
+    assert delete_response.status_code == 200
+
+
+def test_api_playlist_management(app_module, client):
+    playlist_response = client.post("/api/playlists", json={"name": "Gym"})
+    assert playlist_response.status_code == 201
+    playlist_id = playlist_response.get_json()["id"]
+
+    with app_module.SessionLocal() as session:
+        track = _add_track(session, "gym.mp3")
+
+    add_response = client.post(
+        f"/api/playlists/{playlist_id}/tracks",
+        json={"track_id": track.id, "position": 0},
+    )
+    assert add_response.status_code == 201
+    entry_id = add_response.get_json()["entry_id"]
+
+    detail_response = client.get(f"/api/playlists/{playlist_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.get_json()
+    assert any(item["entry_id"] == entry_id for item in detail["tracks"])
+
+    delete_entry = client.delete(f"/api/playlists/{playlist_id}/tracks/{entry_id}")
+    assert delete_entry.status_code == 200
+
+
+def test_api_schedule_management(app_module, client):
+    with app_module.SessionLocal() as session:
+        playlist = _add_playlist(session, "Focus")
+
+    create_response = client.post(
+        "/api/schedules",
+        json={
+            "name": "Morning",
+            "playlist_id": playlist.id,
+            "days": ["0", "1"],
+            "start_time": "08:00",
+            "session_minutes": 20,
+            "enabled": True,
+        },
+    )
+    assert create_response.status_code == 201
+    schedule_id = create_response.get_json()["id"]
+
+    list_response = client.get("/api/schedules")
+    assert list_response.status_code == 200
+    schedules = list_response.get_json()
+    assert any(item["id"] == schedule_id for item in schedules)
+
+    toggle_response = client.post(f"/api/schedules/{schedule_id}/toggle")
+    assert toggle_response.status_code == 200

@@ -83,6 +83,36 @@ def allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in app.config["ALLOWED_EXTENSIONS"]
 
 
+def _store_track_file(file: FileStorage, session) -> Track:
+    filename = file.filename or ""
+    if filename == "":
+        raise ValueError("File name is required")
+    if not allowed_file(filename):
+        raise ValueError(f"File '{filename}' has an invalid extension.")
+    stored_name = f"{uuid4().hex}{Path(filename).suffix.lower()}"
+    secure_name = secure_filename(stored_name)
+    target_path = Path(app.config["UPLOAD_FOLDER"]) / secure_name
+    file.save(target_path)
+    duration = None
+    if MutagenFile is not None:
+        try:
+            audio = MutagenFile(target_path)
+            if audio and audio.info:
+                duration = int(audio.info.length)
+        except Exception:
+            duration = None
+    track = Track(
+        orig_filename=secure_filename(filename),
+        stored_filename=secure_name,
+        content_type=file.mimetype or "audio/mpeg",
+        duration_sec=duration,
+    )
+    session.add(track)
+    session.commit()
+    log(session, "info", "File uploaded", {"track_id": track.id, "filename": track.orig_filename})
+    return track
+
+
 def get_data() -> Dict[str, object]:
     data = request.get_json(silent=True)
     if isinstance(data, dict):
@@ -138,32 +168,11 @@ def upload() -> str | Response:
         files: Iterable[FileStorage] = request.files.getlist("files") or []
         saved = 0
         for file in files:
-            if file.filename == "":
+            try:
+                _store_track_file(file, session)
+            except ValueError as exc:
+                flash(str(exc), "error")
                 continue
-            if not allowed_file(file.filename):
-                flash(f"File '{file.filename}' has an invalid extension.", "error")
-                continue
-            stored_name = f"{uuid4().hex}{Path(file.filename).suffix.lower()}"
-            secure_name = secure_filename(stored_name)
-            target_path = Path(app.config["UPLOAD_FOLDER"]) / secure_name
-            file.save(target_path)
-            duration = None
-            if MutagenFile is not None:
-                try:
-                    audio = MutagenFile(target_path)
-                    if audio and audio.info:
-                        duration = int(audio.info.length)
-                except Exception:
-                    duration = None
-            track = Track(
-                orig_filename=secure_filename(file.filename),
-                stored_filename=secure_name,
-                content_type=file.mimetype or "audio/mpeg",
-                duration_sec=duration,
-            )
-            session.add(track)
-            session.commit()
-            log(session, "info", "File uploaded", {"track_id": track.id, "filename": track.orig_filename})
             saved += 1
         if saved:
             flash(f"Uploaded {saved} file(s).", "success")
@@ -302,16 +311,52 @@ def toggle_schedule(schedule_id: int) -> Response:
 # REST API
 
 
-@app.route("/api/playlists")
+@app.route("/api/playlists", methods=["GET", "POST"])
 def api_playlists() -> Response:
     session = get_session()
+    if request.method == "POST":
+        data = get_data()
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name required"}), 400
+        playlist = Playlist(name=name)
+        session.add(playlist)
+        session.commit()
+        log(session, "info", "Playlist created", {"playlist_id": playlist.id})
+        return jsonify({"id": playlist.id, "name": playlist.name}), 201
     playlists = session.scalars(select(Playlist)).all()
     return jsonify([{"id": p.id, "name": p.name} for p in playlists])
 
 
-@app.route("/api/tracks")
+@app.route("/api/tracks", methods=["GET", "POST"])
 def api_tracks() -> Response:
     session = get_session()
+    if request.method == "POST":
+        files: Iterable[FileStorage] = request.files.getlist("files") or []
+        if not files:
+            return jsonify({"error": "files required"}), 400
+        uploaded = []
+        errors: list[str] = []
+        for file in files:
+            try:
+                track = _store_track_file(file, session)
+                uploaded.append(
+                    {
+                        "id": track.id,
+                        "name": track.orig_filename,
+                        "duration": track.duration_sec,
+                        "preview_url": url_for(
+                            "serve_music", filename=track.stored_filename, _external=True
+                        ),
+                    }
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
+        status_code = 201 if uploaded else 400
+        payload: Dict[str, object] = {"uploaded": uploaded}
+        if errors:
+            payload["errors"] = errors
+        return jsonify(payload), status_code
     tracks = session.scalars(select(Track)).all()
     return jsonify(
         [
@@ -326,10 +371,39 @@ def api_tracks() -> Response:
     )
 
 
+@app.route("/api/tracks/<int:track_id>", methods=["DELETE"])
+def api_delete_track(track_id: int) -> Response:
+    session = get_session()
+    track = session.get(Track, track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+    in_use = session.scalar(select(PlaylistTrack).where(PlaylistTrack.track_id == track_id).limit(1))
+    if in_use:
+        return jsonify({"error": "Track is referenced by a playlist"}), 400
+    file_path = Path(app.config["UPLOAD_FOLDER"]) / track.stored_filename
+    if file_path.exists():
+        file_path.unlink()
+    session.delete(track)
+    session.commit()
+    log(session, "info", "Track deleted", {"track_id": track_id})
+    return jsonify({"status": "deleted"})
+
+
 def _playlist_track_count(session, playlist_id: int) -> int:
     return session.scalar(
         select(func.count()).select_from(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist_id)
     ) or 0
+
+
+def _serialize_playlist_entry(entry: PlaylistTrack) -> Dict[str, object]:
+    track = entry.track  # type: ignore[attr-defined]
+    return {
+        "entry_id": entry.id,
+        "track_id": entry.track_id,
+        "position": entry.position,
+        "track_name": track.orig_filename if track else None,
+        "duration": track.duration_sec if track else None,
+    }
 
 
 @app.route("/api/play", methods=["POST"])
@@ -417,6 +491,82 @@ def api_preview() -> Response:
     return jsonify({"status": "queued"})
 
 
+@app.route("/api/schedules", methods=["GET", "POST"])
+def api_schedules() -> Response:
+    session = get_session()
+    if request.method == "POST":
+        data = get_data()
+        name = (data.get("name") or "Session").strip() or "Session"
+        playlist_id = to_int(data.get("playlist_id")) if data else None
+        days_value = data.get("days") if isinstance(data, dict) else None
+        if isinstance(days_value, str):
+            days = [item.strip() for item in days_value.split(",") if item.strip()]
+        elif isinstance(days_value, list):
+            days = [str(item) for item in days_value]
+        else:
+            days = []
+        start_time = (data.get("start_time") or "00:00") if isinstance(data, dict) else "00:00"
+        minutes = to_int(data.get("session_minutes"), config.get("session_default_minutes", 15)) or config.get(
+            "session_default_minutes", 15
+        )
+        enabled = data.get("enabled")
+        enabled_value = bool(enabled) if enabled is not None else True
+        schedule = Schedule(
+            name=name,
+            playlist_id=playlist_id,
+            days=",".join(days) if days else "0,1,2,3,4,5,6",
+            start_time=start_time,
+            session_minutes=minutes,
+            enabled=enabled_value,
+        )
+        session.add(schedule)
+        session.commit()
+        log(session, "info", "Schedule created", {"schedule_id": schedule.id})
+        return jsonify(
+            {
+                "id": schedule.id,
+                "name": schedule.name,
+                "playlist_id": schedule.playlist_id,
+                "days": schedule.days,
+                "start_time": schedule.start_time,
+                "session_minutes": schedule.session_minutes,
+                "enabled": schedule.enabled,
+            }
+        ), 201
+    schedules = session.scalars(select(Schedule)).all()
+    return jsonify(
+        [
+            {
+                "id": schedule.id,
+                "name": schedule.name,
+                "playlist_id": schedule.playlist_id,
+                "days": schedule.days,
+                "start_time": schedule.start_time,
+                "session_minutes": schedule.session_minutes,
+                "enabled": schedule.enabled,
+            }
+            for schedule in schedules
+        ]
+    )
+
+
+@app.route("/api/schedules/<int:schedule_id>/toggle", methods=["POST"])
+def api_toggle_schedule(schedule_id: int) -> Response:
+    session = get_session()
+    schedule = session.get(Schedule, schedule_id)
+    if not schedule:
+        return jsonify({"error": "Schedule not found"}), 404
+    data = get_data()
+    if data and "enabled" in data:
+        desired = bool(data.get("enabled"))
+        schedule.enabled = desired
+    else:
+        schedule.enabled = not schedule.enabled
+    session.commit()
+    log(session, "info", "Schedule toggled", {"schedule_id": schedule_id, "enabled": schedule.enabled})
+    return jsonify({"id": schedule.id, "enabled": schedule.enabled})
+
+
 @app.route("/api/status")
 def api_status() -> Response:
     session = get_session()
@@ -431,6 +581,74 @@ def api_status() -> Response:
         "heartbeat_at": state.heartbeat_at.isoformat() if state.heartbeat_at else None,
     }
     return jsonify(payload)
+
+
+@app.route("/api/playlists/<int:playlist_id>")
+def api_playlist_detail(playlist_id: int) -> Response:
+    session = get_session()
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        return jsonify({"error": "Playlist not found"}), 404
+    entries = session.scalars(
+        select(PlaylistTrack)
+        .where(PlaylistTrack.playlist_id == playlist_id)
+        .order_by(PlaylistTrack.position)
+    ).all()
+    # Ensure track relationship is loaded
+    for entry in entries:
+        _ = entry.track
+    return jsonify(
+        {
+            "id": playlist.id,
+            "name": playlist.name,
+            "tracks": [_serialize_playlist_entry(entry) for entry in entries],
+        }
+    )
+
+
+@app.route("/api/playlists/<int:playlist_id>/tracks", methods=["POST"])
+def api_playlist_add_track(playlist_id: int) -> Response:
+    session = get_session()
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        return jsonify({"error": "Playlist not found"}), 404
+    data = get_data()
+    track_id = to_int(data.get("track_id")) if data else None
+    if track_id is None:
+        return jsonify({"error": "track_id required"}), 400
+    track = session.get(Track, track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+    position = to_int(data.get("position"), None)
+    if position is None:
+        position = _playlist_track_count(session, playlist_id)
+    entry = PlaylistTrack(playlist_id=playlist_id, track_id=track_id, position=position)
+    session.add(entry)
+    session.commit()
+    log(
+        session,
+        "info",
+        "Track added to playlist",
+        {"playlist_id": playlist_id, "track_id": track_id, "position": position},
+    )
+    return jsonify(_serialize_playlist_entry(entry)), 201
+
+
+@app.route("/api/playlists/<int:playlist_id>/tracks/<int:entry_id>", methods=["DELETE"])
+def api_playlist_remove_entry(playlist_id: int, entry_id: int) -> Response:
+    session = get_session()
+    entry = session.get(PlaylistTrack, entry_id)
+    if not entry or entry.playlist_id != playlist_id:
+        return jsonify({"error": "Entry not found"}), 404
+    session.delete(entry)
+    session.commit()
+    log(
+        session,
+        "info",
+        "Track removed from playlist",
+        {"playlist_id": playlist_id, "entry_id": entry_id},
+    )
+    return jsonify({"status": "deleted"})
 
 
 @app.route("/music/<path:filename>")
