@@ -104,6 +104,35 @@ def test_cvlc_issues_play_command(monkeypatch, tmp_path):
     assert second == "play"
 
 
+def test_cvlc_adds_fake_tty_on_windows(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc.exe"
+    fake_vlc.write_text("@echo off\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
+
+    launched = {}
+
+    class DummyProc:
+        def __init__(self, args, **kwargs):
+            launched["args"] = args
+            self.stdin = None
+
+        def poll(self):
+            return None
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(player_module.subprocess, "Popen", lambda *a, **k: DummyProc(*a, **k))
+    monkeypatch.setattr(CVLCPlayer, "_ensure_thread", lambda self: None)
+    monkeypatch.setattr(CVLCPlayer, "_needs_fake_tty", lambda self: True)
+
+    player = CVLCPlayer()
+    player.load_playlist(["track-one.mp3"])
+    player.play()
+
+    assert "--rc-fake-tty" in launched["args"]
+
+
 @pytest.fixture(scope="session")
 def app_module(tmp_path_factory):
     cfg_dir = tmp_path_factory.mktemp("cfg")

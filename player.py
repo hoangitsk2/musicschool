@@ -225,9 +225,10 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
         self._files = list(files)
         self._index = 0 if self._files else -1
 
-    def _spawn(self) -> None:
-        if not self._files:
-            return
+    def _needs_fake_tty(self) -> bool:
+        return os.name == "nt"
+
+    def _build_args(self) -> list[str]:
         args = [
             self._binary,
             "--quiet",
@@ -237,7 +238,20 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
             "rc",
             "--no-video",
             "--rc-quiet",
-        ] + self._files
+        ]
+        if self._needs_fake_tty():
+            # When VLC is launched without a console window on Windows it does
+            # not treat stdin as an interactive terminal. The RC interface
+            # therefore ignores commands unless we explicitly request the fake
+            # TTY bridge.
+            args.append("--rc-fake-tty")
+        args += self._files
+        return args
+
+    def _spawn(self) -> None:
+        if not self._files:
+            return
+        args = self._build_args()
         self._process = subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
