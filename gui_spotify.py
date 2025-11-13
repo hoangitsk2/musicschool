@@ -1,6 +1,8 @@
 """Desktop controller for auto_break_player using ttkbootstrap."""
 from __future__ import annotations
 
+import argparse
+import os
 import threading
 import time
 from tkinter import messagebox
@@ -9,17 +11,18 @@ import requests
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import BOTH, HORIZONTAL, LEFT, RIGHT, W, X
 
-API_BASE = "http://127.0.0.1:8000/api"
+DEFAULT_API_BASE = os.environ.get("AUTO_BREAK_PLAYER_API", "http://127.0.0.1:8000/api")
 
 
 class SpotifyStyleGUI(ttk.Window):
-    def __init__(self) -> None:
+    def __init__(self, api_base: str = DEFAULT_API_BASE) -> None:
         super().__init__(themename="darkly")
         self.title("auto_break_player controller")
         self.geometry("480x620")
         self.playlists: list[dict[str, object]] = []
         self.tracks: list[dict[str, object]] = []
         self.power_auto = ttk.BooleanVar(value=True)
+        self.api_base = api_base.rstrip("/")
 
         self._build_layout()
         self.after(100, self.refresh_playlists)
@@ -32,7 +35,12 @@ class SpotifyStyleGUI(ttk.Window):
         container = ttk.Frame(self, padding=padding)
         container.pack(fill=BOTH, expand=True)
 
-        title = ttk.Label(container, text="Break Session Control", font=("Inter", 18, "bold"))
+        title = ttk.Label(
+            container,
+            text="Break Session Control",
+            font=("Inter", 20, "bold"),
+            bootstyle="inverse",
+        )
         title.pack(pady=(0, 10))
 
         self.playlist_combo = ttk.Combobox(container, bootstyle="dark", state="readonly")
@@ -53,7 +61,7 @@ class SpotifyStyleGUI(ttk.Window):
         )
         self.auto_power_check.pack(anchor=W, pady=5)
 
-        preview_frame = ttk.Labelframe(container, text="Track preview", padding=padding)
+        preview_frame = ttk.Labelframe(container, text="Track preview", padding=padding, bootstyle="secondary")
         preview_frame.pack(fill=X, pady=5)
         self.preview_combo = ttk.Combobox(preview_frame, bootstyle="dark", state="readonly")
         self.preview_combo.pack(fill=X, pady=(0, 8))
@@ -64,7 +72,7 @@ class SpotifyStyleGUI(ttk.Window):
             bootstyle="secondary",
         ).pack(fill=X)
 
-        button_frame = ttk.Frame(container)
+        button_frame = ttk.Frame(container, padding=(0, 5))
         button_frame.pack(fill=X, pady=10)
         ttk.Button(button_frame, text="Play", command=self.on_play, bootstyle="success").pack(side=LEFT, expand=True, padx=5)
         ttk.Button(button_frame, text="Stop", command=self.on_stop, bootstyle="danger").pack(side=LEFT, expand=True, padx=5)
@@ -83,7 +91,7 @@ class SpotifyStyleGUI(ttk.Window):
         )
         self.volume_slider.pack(fill=X)
 
-        delay_frame = ttk.Labelframe(container, text="Timed session", padding=padding)
+        delay_frame = ttk.Labelframe(container, text="Timed session", padding=padding, bootstyle="info")
         delay_frame.pack(fill=X, pady=20)
         ttk.Label(delay_frame, text="Delay start (minutes)").pack(anchor=W)
         self.delay_entry = ttk.Entry(delay_frame)
@@ -91,7 +99,7 @@ class SpotifyStyleGUI(ttk.Window):
         self.delay_entry.pack(fill=X, pady=5)
         ttk.Button(delay_frame, text="Start timed session", command=self.on_timed_session, bootstyle="info").pack(fill=X)
 
-        status_frame = ttk.Labelframe(container, text="Status", padding=padding)
+        status_frame = ttk.Labelframe(container, text="Status", padding=padding, bootstyle="primary")
         status_frame.pack(fill=X)
         self.status_label = ttk.Label(status_frame, text="Idle", font=("Inter", 16, "bold"))
         self.status_label.pack(anchor=W)
@@ -99,11 +107,15 @@ class SpotifyStyleGUI(ttk.Window):
         self.eta_label.pack(anchor=W, pady=2)
         self.power_label = ttk.Label(status_frame, text="Power: OFF")
         self.power_label.pack(anchor=W, pady=2)
+        self.playing_playlist_label = ttk.Label(status_frame, text="Playlist: —")
+        self.playing_playlist_label.pack(anchor=W, pady=2)
+        self.playing_track_label = ttk.Label(status_frame, text="Track: —")
+        self.playing_track_label.pack(anchor=W, pady=2)
 
     # ------------------------------------------------------------------
     def refresh_playlists(self) -> None:
         try:
-            response = requests.get(f"{API_BASE}/playlists", timeout=5)
+            response = requests.get(f"{self.api_base}/playlists", timeout=5)
             response.raise_for_status()
             self.playlists = response.json()
             names = [item["name"] for item in self.playlists]
@@ -117,7 +129,7 @@ class SpotifyStyleGUI(ttk.Window):
 
     def refresh_tracks(self) -> None:
         try:
-            response = requests.get(f"{API_BASE}/tracks", timeout=5)
+            response = requests.get(f"{self.api_base}/tracks", timeout=5)
             response.raise_for_status()
             self.tracks = response.json()
             names = [item["name"] for item in self.tracks]
@@ -131,7 +143,7 @@ class SpotifyStyleGUI(ttk.Window):
 
     def refresh_status(self) -> None:
         try:
-            response = requests.get(f"{API_BASE}/status", timeout=5)
+            response = requests.get(f"{self.api_base}/status", timeout=5)
             response.raise_for_status()
             data = response.json()
             self.status_label.configure(text=data.get("status", "idle").title())
@@ -141,6 +153,10 @@ class SpotifyStyleGUI(ttk.Window):
             volume = data.get("volume")
             if isinstance(volume, int):
                 self.volume_var.set(volume)
+            playlist_name = self._lookup_playlist_name(data.get("playlist_id"))
+            track_name = self._lookup_track_name(data.get("current_track_id"))
+            self.playing_playlist_label.configure(text=f"Playlist: {playlist_name}")
+            self.playing_track_label.configure(text=f"Track: {track_name}")
         except Exception:
             pass
         finally:
@@ -164,6 +180,22 @@ class SpotifyStyleGUI(ttk.Window):
             if item.get("name") == name:
                 return int(item.get("id"))
         return None
+
+    def _lookup_playlist_name(self, playlist_id: int | None) -> str:
+        if playlist_id is None:
+            return "—"
+        for item in self.playlists:
+            if int(item.get("id", -1)) == int(playlist_id):
+                return str(item.get("name"))
+        return "—"
+
+    def _lookup_track_name(self, track_id: int | None) -> str:
+        if track_id is None:
+            return "—"
+        for item in self.tracks:
+            if int(item.get("id", -1)) == int(track_id):
+                return str(item.get("name"))
+        return "—"
 
     def on_play(self) -> None:
         playlist_id = self._selected_playlist_id()
@@ -237,7 +269,7 @@ class SpotifyStyleGUI(ttk.Window):
 
     # ------------------------------------------------------------------
     def _post(self, endpoint: str, payload: dict) -> None:
-        response = requests.post(f"{API_BASE}/{endpoint}", json=payload, timeout=5)
+        response = requests.post(f"{self.api_base}/{endpoint}", json=payload, timeout=5)
         if response.status_code >= 400:
             data = response.json() if response.headers.get("Content-Type", "").startswith("application/json") else {}
             raise RuntimeError(data.get("error") or response.text)
@@ -250,8 +282,16 @@ class SpotifyStyleGUI(ttk.Window):
             return default
 
 
-def main() -> None:
-    app = SpotifyStyleGUI()
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Desktop controller for auto_break_player")
+    parser.add_argument(
+        "--api-base",
+        dest="api_base",
+        default=DEFAULT_API_BASE,
+        help="Base URL for the auto_break_player API (default: %(default)s)",
+    )
+    args = parser.parse_args(argv)
+    app = SpotifyStyleGUI(api_base=args.api_base)
     app.mainloop()
 
 

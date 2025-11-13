@@ -171,6 +171,10 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
             except Exception:
                 self._process.kill()
         self._process = None
+        if self._thread and self._thread.is_alive():
+            self._commands.put("__quit__")
+            self._thread.join(timeout=0.2)
+        self._thread = None
 
     def load_playlist(self, files: List[str]) -> None:
         self.stop()

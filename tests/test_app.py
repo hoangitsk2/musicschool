@@ -8,7 +8,7 @@ import pytest
 
 from config import load_config
 from models import Base, Command, Playlist, PlaylistTrack, Track, ensure_state_row, make_engine
-from player import DummyPlayer
+from player import CVLCPlayer, DummyPlayer, make_player
 from sqlalchemy import select
 
 
@@ -33,10 +33,13 @@ def test_player_dummy():
     assert player.current_index() == 1
     player.stop()
     assert not player.is_playing()
-    from player import make_player
-
     auto_player = make_player("dummy")
     assert isinstance(auto_player, DummyPlayer)
+
+
+def test_player_cvlc_instantiation():
+    player = make_player("cvlc")
+    assert isinstance(player, CVLCPlayer)
 
 
 @pytest.fixture(scope="session")
