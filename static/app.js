@@ -46,6 +46,42 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const breakForm = document.getElementById("break-plan-form");
+  if (breakForm) {
+    breakForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(breakForm);
+      const playlistId = formData.get("playlist_id");
+      if (!playlistId) {
+        toast("Chọn playlist cho giờ ra chơi", true);
+        return;
+      }
+      const startTimes = (formData.get("start_times") || "")
+        .toString()
+        .split(/[\n,;]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (!startTimes.length) {
+        toast("Nhập ít nhất một thời gian HH:MM", true);
+        return;
+      }
+      const payload = {
+        playlist_id: Number(playlistId),
+        name_prefix: formData.get("name_prefix") || "Giờ ra chơi",
+        session_minutes: Number(formData.get("session_minutes") || 15),
+        start_times: startTimes,
+        days: formData.getAll("days"),
+        replace: formData.get("replace") === "on",
+      };
+      try {
+        await api("schedules/break-plan", payload);
+        toast("Đã áp dụng kế hoạch giờ ra chơi");
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+  }
+
   document.querySelectorAll("[data-power]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const desired = btn.dataset.power === "on";

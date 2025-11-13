@@ -10,6 +10,7 @@ An automated break-time music player designed for Raspberry Pi deployments with 
 - SQLite database via SQLAlchemy with tables for tracks, playlists, schedules, commands, state, and logs.
 - Secure audio uploads with extension whitelist and unique filenames.
 - Tkinter (ttkbootstrap) desktop controller for quick control over the REST API.
+- GitHub Pages-ready remote dashboard for controlling the Pi from anywhere.
 - Systemd service definitions for Raspberry Pi autostart.
 - Acceptance tests powered by pytest.
 
@@ -40,7 +41,7 @@ auto_break_player/
 
 ## Configuration
 
-1. Copy `config.yaml.example` to `config.yaml` and adjust settings.
+1. Copy `config.yaml.example` to `config.yaml` and adjust settings (set `cors_origins` to the domains that will host your dashboard).
 2. Ensure `music_dir` and `logs_dir` exist or will be created by the app.
 3. On Windows development, set `vlc_backend: dummy` and `gpio.enabled: false`.
 
@@ -59,6 +60,14 @@ python gui_spotify.py
 ```
 
 Open the dashboard at <http://127.0.0.1:8000>.
+
+### Deploying the remote dashboard
+
+1. Update `config.yaml` on the Raspberry Pi so `cors_origins` includes the GitHub Pages origin (for example `https://your-username.github.io`).
+2. Upload the contents of `remote_site/` to a GitHub repository and enable GitHub Pages (or serve the folder from any static host).
+3. Visit the published site, set the Raspberry Pi API URL in the connection card, and control schedules and playback remotely.
+
+The remote dashboard talks directly to the Flask API, so no proxy or server-side rendering is required.
 
 ## Setup (Raspberry Pi / Linux)
 

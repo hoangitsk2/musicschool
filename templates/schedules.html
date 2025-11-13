@@ -1,16 +1,17 @@
 {% extends "layout.html" %}
 {% block title %}Schedules • auto_break_player{% endblock %}
 {% block content %}
-<div class="grid gap-8 lg:grid-cols-2">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body space-y-4">
-      <h2 class="card-title">New schedule</h2>
-      <form method="post" class="grid gap-4">
-        <label class="form-control">
-          <div class="label"><span class="label-text">Name</span></div>
-          <input type="text" name="name" class="input input-bordered" placeholder="Morning break" />
-        </label>
-        <label class="form-control">
+<div class="grid gap-8 lg:grid-cols-3">
+  <div class="space-y-8 lg:col-span-1">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body space-y-4">
+        <h2 class="card-title">New schedule</h2>
+        <form method="post" class="grid gap-4">
+          <label class="form-control">
+            <div class="label"><span class="label-text">Name</span></div>
+            <input type="text" name="name" class="input input-bordered" placeholder="Morning break" />
+          </label>
+          <label class="form-control">
           <div class="label"><span class="label-text">Playlist</span></div>
           <select name="playlist_id" class="select select-bordered" required>
             <option value="" disabled selected>Select playlist</option>
@@ -36,17 +37,65 @@
         </label>
         <label class="form-control">
           <div class="label"><span class="label-text">Session minutes</span></div>
-          <input type="number" name="session_minutes" class="input input-bordered" value="{{ config.session_default_minutes }}" />
-        </label>
-        <label class="flex items-center gap-3">
-          <input type="checkbox" name="enabled" class="toggle toggle-primary" checked />
-          <span>Enabled</span>
-        </label>
-        <button class="btn btn-primary" type="submit">Save schedule</button>
-      </form>
+            <input type="number" name="session_minutes" class="input input-bordered" value="{{ config.session_default_minutes }}" />
+          </label>
+          <label class="flex items-center gap-3">
+            <input type="checkbox" name="enabled" class="toggle toggle-primary" checked />
+            <span>Enabled</span>
+          </label>
+          <button class="btn btn-primary" type="submit">Save schedule</button>
+        </form>
+      </div>
+    </div>
+    <div class="card bg-base-100 shadow">
+      <div class="card-body space-y-4">
+        <h2 class="card-title">School break planner</h2>
+        <p class="text-sm opacity-70">
+          Lập lịch các phiên 15 phút cho giờ ra chơi. Hệ thống sẽ tự bật trên Raspberry Pi và dừng khi hết thời lượng.
+        </p>
+        <form method="post" action="{{ url_for('schedules_break_plan') }}" class="grid gap-4">
+          <label class="form-control">
+            <div class="label"><span class="label-text">Group name</span></div>
+            <input type="text" name="name_prefix" class="input input-bordered" value="Giờ ra chơi" />
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Playlist</span></div>
+            <select name="playlist_id" class="select select-bordered" required>
+              <option value="" disabled selected>Select playlist</option>
+              {% for playlist in playlists %}
+                <option value="{{ playlist.id }}">{{ playlist.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Start times (comma or line separated HH:MM)</span></div>
+            <textarea name="start_times" class="textarea textarea-bordered" rows="3">09:30, 15:30</textarea>
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Minutes per session</span></div>
+            <input type="number" name="session_minutes" class="input input-bordered" value="15" min="5" max="60" />
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Days (0=Mon .. 6=Sun)</span></div>
+            <div class="flex flex-wrap gap-2">
+              {% for day in range(7) %}
+                <label class="label cursor-pointer">
+                  <span class="label-text mr-2">{{ day }}</span>
+                  <input type="checkbox" name="days" value="{{ day }}" class="checkbox checkbox-sm" {% if day in [1,2,3,4,5] %}checked{% endif %} />
+                </label>
+              {% endfor %}
+            </div>
+          </label>
+          <label class="flex items-center gap-3">
+            <input type="checkbox" name="replace" class="toggle toggle-warning" checked />
+            <span>Disable previous break schedules in this group</span>
+          </label>
+          <button class="btn btn-success" type="submit">Apply break plan</button>
+        </form>
+      </div>
     </div>
   </div>
-  <div class="card bg-base-100 shadow">
+  <div class="card bg-base-100 shadow lg:col-span-2">
     <div class="card-body">
       <h2 class="card-title">Existing schedules</h2>
       <div class="overflow-x-auto mt-4">
