@@ -231,8 +231,11 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
         args = [
             self._binary,
             "--quiet",
+            "--intf",
+            "dummy",
             "--extraintf",
             "rc",
+            "--no-video",
             "--rc-quiet",
         ] + self._files
         self._process = subprocess.Popen(
@@ -243,12 +246,18 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
             text=True,
         )
         self._ensure_thread()
+        # make sure the first command that reaches the RC interface is the
+        # volume level so the preview is not startling on launch
         self._commands.put(f"volume {int(self._volume * 2.56)}")
 
     def play(self) -> None:
         if self._process is None:
             self._spawn()
-        self._playing = True
+        if self._process:
+            # Explicitly send the play command – on Windows VLC does not begin
+            # playback automatically when the RC interface is enabled.
+            self._commands.put("play")
+            self._playing = True
 
     def stop(self) -> None:
         self._playing = False
@@ -278,6 +287,8 @@ class CVLCPlayer(BasePlayer):  # pragma: no cover - requires cvlc binary
     def skip(self) -> None:
         if self._process:
             self._commands.put("next")
+            if self._files:
+                self._index = (self._index + 1) % len(self._files)
 
 
 def make_player(backend: str) -> BasePlayer:

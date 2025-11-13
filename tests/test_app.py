@@ -10,6 +10,7 @@ import pytest
 from config import load_config
 from models import Base, Command, Playlist, PlaylistTrack, Schedule, Track, ensure_state_row, make_engine
 from player import CVLCPlayer, DummyPlayer, make_player
+import player as player_module
 from sqlalchemy import select
 
 
@@ -66,6 +67,41 @@ def test_player_cvlc_instantiation(monkeypatch, tmp_path):
     monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
     player = make_player("cvlc")
     assert isinstance(player, CVLCPlayer)
+
+
+def test_cvlc_issues_play_command(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc.exe"
+    fake_vlc.write_text("@echo off\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
+
+    launched = {}
+
+    class DummyProc:
+        def __init__(self, args, **kwargs):
+            launched["args"] = args
+            self.stdin = None
+
+        def poll(self):
+            return None
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(player_module.subprocess, "Popen", lambda *a, **k: DummyProc(*a, **k))
+    monkeypatch.setattr(CVLCPlayer, "_ensure_thread", lambda self: None)
+
+    player = CVLCPlayer()
+    player.load_playlist(["track-one.mp3"])
+    player.play()
+
+    args = launched["args"]
+    assert "--intf" in args and "dummy" in args
+    assert "--no-video" in args
+
+    first = player._commands.get_nowait()
+    second = player._commands.get_nowait()
+    assert first.startswith("volume ")
+    assert second == "play"
 
 
 @pytest.fixture(scope="session")

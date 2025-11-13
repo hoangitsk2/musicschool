@@ -38,7 +38,10 @@
 
       <section class="grid">
         <article class="card">
-          <h2>Live status</h2>
+          <div class="card__header">
+            <h2>Live status</h2>
+            <span class="pill pill--idle" id="status-pill">Idle</span>
+          </div>
           <dl class="status-list" id="status-list">
             <div><dt>Power</dt><dd id="status-power">–</dd></div>
             <div><dt>Playback</dt><dd id="status-playback">–</dd></div>
@@ -54,6 +57,13 @@
 
         <article class="card">
           <h2>Now playing controls</h2>
+          <div class="now-playing">
+            <div class="now-playing__art" id="now-playing-art" aria-hidden="true"></div>
+            <div class="now-playing__meta">
+              <h3 id="now-playing-title">Chưa có bản nhạc</h3>
+              <p id="now-playing-subtitle">Chọn playlist và thời lượng để bắt đầu bữa tiệc giờ ra chơi.</p>
+            </div>
+          </div>
           <div class="button-row">
             <button data-action="play" class="accent">Play Selected Playlist</button>
             <button data-action="stop">Stop</button>

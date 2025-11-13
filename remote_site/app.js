@@ -40,7 +40,36 @@ const elements = {
   statusTrack: document.getElementById("status-track"),
   statusVolume: document.getElementById("status-volume"),
   statusUpdated: document.getElementById("status-updated"),
+  statusPill: document.getElementById("status-pill"),
+  nowPlayingTitle: document.getElementById("now-playing-title"),
+  nowPlayingSubtitle: document.getElementById("now-playing-subtitle"),
+  nowPlayingArt: document.getElementById("now-playing-art"),
 };
+
+function gradientForLabel(label) {
+  if (!label) {
+    return "";
+  }
+  let hash = 0;
+  for (let i = 0; i < label.length; i += 1) {
+    hash = (hash + label.charCodeAt(i) * (i + 3)) % 360;
+  }
+  const hue = hash;
+  const secondary = (hue + 60) % 360;
+  return `linear-gradient(135deg, hsla(${hue}, 82%, 58%, 0.62), hsla(${secondary}, 68%, 52%, 0.62))`;
+}
+
+function updateNowPlayingVisual({ playlistName, trackName, statusText }) {
+  const title = playlistName || "Chưa có bản nhạc";
+  const subtitle = trackName || statusText || "Chọn playlist và thời lượng để bắt đầu bữa tiệc giờ ra chơi.";
+  elements.nowPlayingTitle.textContent = title;
+  elements.nowPlayingSubtitle.textContent = subtitle;
+  if (playlistName) {
+    elements.nowPlayingArt.style.background = gradientForLabel(playlistName);
+  } else {
+    elements.nowPlayingArt.style.background = "linear-gradient(135deg, rgba(127, 107, 255, 0.45), rgba(106, 235, 211, 0.45))";
+  }
+}
 
 function initDayCheckboxes() {
   elements.breakDays.innerHTML = "";
@@ -163,6 +192,17 @@ function updateStatusUi(status) {
   }
   const heartbeat = status.heartbeat_at ? new Date(status.heartbeat_at) : new Date();
   elements.statusUpdated.textContent = heartbeat.toLocaleTimeString();
+  if (elements.statusPill) {
+    const isLive = status.power_on || (status.status && status.status.toLowerCase() !== "idle");
+    elements.statusPill.textContent = isLive ? "Đang hoạt động" : "Chờ tín hiệu";
+    elements.statusPill.classList.toggle("pill--live", isLive);
+    elements.statusPill.classList.toggle("pill--idle", !isLive);
+  }
+  updateNowPlayingVisual({
+    playlistName,
+    trackName: trackName && trackName !== "—" ? trackName : null,
+    statusText: playbackText,
+  });
   state.status = status;
 }
 
@@ -193,6 +233,8 @@ function renderPlaylists(playlists) {
   };
   makeOptions(elements.playlistSelect);
   makeOptions(elements.breakPlaylistSelect);
+  const selected = playlists.find((playlist) => String(playlist.id) === elements.playlistSelect.value);
+  updateNowPlayingVisual({ playlistName: selected?.name });
 }
 
 function renderSchedules(schedules) {
@@ -424,6 +466,10 @@ function setupEventListeners() {
   elements.volumeSlider.addEventListener("change", handleVolumeChange);
   elements.breakForm.addEventListener("submit", handleBreakForm);
   elements.scheduleList.addEventListener("click", handleScheduleToggle);
+  elements.playlistSelect.addEventListener("change", () => {
+    const playlist = state.playlists.find((item) => String(item.id) === elements.playlistSelect.value);
+    updateNowPlayingVisual({ playlistName: playlist?.name });
+  });
   elements.connectionForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const value = elements.apiBaseInput.value.trim();
