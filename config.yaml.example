@@ -18,3 +18,11 @@ gpio:
   active_high: true
 ui:
   theme: dark
+
+bootstrap_schedules:
+  - name: Morning Bell
+    playlist: Morning Playlist
+    time: '08:00'
+    days: Mon-Fri
+    minutes: 20
+
