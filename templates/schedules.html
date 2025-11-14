@@ -2,9 +2,10 @@
 {% block title %}Schedules • auto_break_player{% endblock %}
 {% block content %}
 <div class="grid gap-8 lg:grid-cols-2">
-  <div class="card bg-base-100 shadow">
+  <div class="card bg-base-100/90 shadow-xl border border-base-300">
     <div class="card-body space-y-4">
       <h2 class="card-title">New schedule</h2>
+      <p class="text-sm opacity-70">Choose when your Raspberry Pi should start playback automatically.</p>
       <form method="post" class="grid gap-4">
         <label class="form-control">
           <div class="label"><span class="label-text">Name</span></div>
@@ -19,25 +20,37 @@
             {% endfor %}
           </select>
         </label>
-        <label class="form-control">
-          <div class="label"><span class="label-text">Days (0=Mon .. 6=Sun)</span></div>
+        <div class="space-y-2">
+          <span class="label-text text-sm">Days</span>
           <div class="flex flex-wrap gap-2">
-            {% for day in range(7) %}
-              <label class="label cursor-pointer">
-                <span class="label-text mr-2">{{ day }}</span>
-                <input type="checkbox" name="days" value="{{ day }}" class="checkbox checkbox-sm" checked />
+            {% set day_labels = [
+              ('0', 'Mon'),
+              ('1', 'Tue'),
+              ('2', 'Wed'),
+              ('3', 'Thu'),
+              ('4', 'Fri'),
+              ('5', 'Sat'),
+              ('6', 'Sun'),
+            ] %}
+            {% for value, label in day_labels %}
+              <label class="btn btn-sm btn-outline">
+                <input type="checkbox" name="days" value="{{ value }}" class="hidden peer" checked />
+                <span class="peer-checked:text-primary peer-checked:font-semibold">{{ label }}</span>
               </label>
             {% endfor %}
           </div>
-        </label>
-        <label class="form-control">
-          <div class="label"><span class="label-text">Start time</span></div>
-          <input type="time" name="start_time" class="input input-bordered" value="08:00" />
-        </label>
-        <label class="form-control">
-          <div class="label"><span class="label-text">Session minutes</span></div>
-          <input type="number" name="session_minutes" class="input input-bordered" value="{{ config.session_default_minutes }}" />
-        </label>
+          <p class="text-xs opacity-60">Leave all days selected for daily playback.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          <label class="form-control">
+            <div class="label"><span class="label-text">Start time</span></div>
+            <input type="time" name="start_time" class="input input-bordered" value="08:00" />
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Session minutes</span></div>
+            <input type="number" name="session_minutes" class="input input-bordered" value="{{ config.session_default_minutes }}" />
+          </label>
+        </div>
         <label class="flex items-center gap-3">
           <input type="checkbox" name="enabled" class="toggle toggle-primary" checked />
           <span>Enabled</span>
@@ -46,7 +59,7 @@
       </form>
     </div>
   </div>
-  <div class="card bg-base-100 shadow">
+  <div class="card bg-base-100/90 shadow-xl border border-base-300">
     <div class="card-body">
       <h2 class="card-title">Existing schedules</h2>
       <div class="overflow-x-auto mt-4">
@@ -66,11 +79,11 @@
               <tr>
                 <td>{{ schedule.name }}</td>
                 <td>{{ schedule.playlist.name if schedule.playlist else '—' }}</td>
-                <td>{{ schedule.days }}</td>
-                <td>{{ schedule.start_time }}</td>
+                <td>{{ schedule.days|days_human }}</td>
+                <td>{{ schedule.start_time|human_time }}</td>
                 <td>{{ schedule.session_minutes }}</td>
                 <td>
-                  <form method="post" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}">
+                  <form method="post" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}" data-toggle-schedule>
                     <button class="btn btn-xs {{ 'btn-success' if schedule.enabled else 'btn-outline' }}" type="submit">
                       {{ 'Enabled' if schedule.enabled else 'Disabled' }}
                     </button>

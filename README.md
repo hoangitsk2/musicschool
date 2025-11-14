@@ -1,15 +1,14 @@
 # auto_break_player
 
-An automated break-time music player designed for Raspberry Pi deployments with a modern web UI, Tkinter desktop controller, and background playback daemon.
+An automated break-time music player designed for Raspberry Pi deployments with a modern web UI and background playback daemon.
 
 ## Features
 
-- Flask backend with REST API and Tailwind + DaisyUI dashboard (dark theme).
+- Tailwind + DaisyUI dashboard with live status cards, upcoming schedule reminders, and in-place schedule toggles.
 - Playback daemon coordinating schedules, session timeout, and GPIO relay control.
 - Multiple playback backends: python-vlc, cvlc subprocess, or dummy player for development.
 - SQLite database via SQLAlchemy with tables for tracks, playlists, schedules, commands, state, and logs.
 - Secure audio uploads with extension whitelist and unique filenames.
-- Tkinter (ttkbootstrap) desktop controller for quick control over the REST API.
 - Systemd service definitions for Raspberry Pi autostart.
 - Acceptance tests powered by pytest.
 
@@ -25,7 +24,6 @@ auto_break_player/
 ├─ config.py                  # Default settings and YAML loader
 ├─ config.yaml.example        # Sample configuration
 ├─ requirements.txt           # Linux/Raspberry Pi dependencies
-├─ gui_spotify.py             # Tkinter desktop controller (dark style)
 ├─ scripts/
 │  └─ migrate_db.py           # Create database & ensure state row
 ├─ systemd/
@@ -33,6 +31,7 @@ auto_break_player/
 │  └─ auto_break_player-daemon.service
 ├─ templates/                 # Tailwind/DaisyUI templates
 ├─ static/app.js              # Dashboard interactions
+├─ static/styles.css          # Custom theming
 ├─ music/                     # Uploaded audio files
 └─ logs/                      # Log output (database-backed)
 ```
@@ -51,11 +50,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp config.yaml.example config.yaml
 python scripts/migrate_db.py
-python app.py  # terminal 1
-python playback_daemon.py  # terminal 2
+python app.py  # terminal 1 (web dashboard)
+python playback_daemon.py  # terminal 2 (automatic playback loop)
 ```
 
-### Systemd
+### Systemd (hands-free startup)
 
 Update the service files to point to your project path, copy to `/etc/systemd/system/`, then enable:
 
@@ -65,20 +64,11 @@ sudo systemctl enable --now auto_break_player.service
 sudo systemctl enable --now auto_break_player-daemon.service
 ```
 
-### Command-line schedule helper
+Once enabled the dashboard and playback daemon boot automatically on power-up—no manual commands needed.
 
-For headless deployments you can manage schedules without opening the web UI
-by using the helper script:
+### Zero-click schedule management
 
-```bash
-python scripts/schedule_cli.py list
-python scripts/schedule_cli.py add --name "Morning" --playlist "Morning Mix" --time 08:00 --minutes 15 --days Mon-Fri
-python scripts/schedule_cli.py disable 2
-```
-
-The script accepts playlist identifiers or exact playlist names, supports day
-aliases such as `Mon-Fri`, `Weekend`, or `Fri-Mon`, and defaults to scheduling
-every day when `--days` is omitted.
+The dashboard now surfaces schedule status, friendly day descriptions, and live toggle buttons. Add or disable a schedule from any browser—changes sync instantly to the daemon.
 
 ### Automatic schedules from configuration
 

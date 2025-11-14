@@ -36,6 +36,7 @@ from models import (
     make_engine,
     make_session_factory,
 )
+from schedule_utils import describe_days, next_occurrence
 from sqlalchemy import func, select
 
 try:  # pragma: no cover - optional dependency
@@ -105,6 +106,55 @@ def enqueue_command(session, type_: str, payload: Optional[Dict[str, object]] = 
     session.commit()
 
 
+@app.template_filter("days_human")
+def days_human(value: str | None) -> str:
+    return describe_days(value)
+
+
+@app.template_filter("human_time")
+def human_time(value: dt.datetime | dt.time | str | None) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, dt.datetime):
+        return value.strftime("%H:%M")
+    if isinstance(value, dt.time):
+        return value.strftime("%H:%M")
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+@app.template_filter("human_delta")
+def human_delta(value: dt.datetime | None, reference: dt.datetime | None = None) -> str:
+    if value is None:
+        return "—"
+    if reference is None:
+        reference = dt.datetime.now()
+    delta = value - reference
+    total_seconds = int(delta.total_seconds())
+    if total_seconds <= 0:
+        minutes_ago = abs(total_seconds) // 60
+        if minutes_ago == 0:
+            return "now"
+        if minutes_ago == 1:
+            return "1 minute ago"
+        if minutes_ago < 60:
+            return f"{minutes_ago} minutes ago"
+        hours_ago = minutes_ago // 60
+        if hours_ago == 1:
+            return "1 hour ago"
+        return f"{hours_ago} hours ago"
+    minutes = total_seconds // 60
+    hours, minutes = divmod(minutes, 60)
+    if hours and minutes:
+        return f"in {hours}h {minutes}m"
+    if hours:
+        return f"in {hours}h"
+    if minutes:
+        return f"in {minutes}m"
+    return "in moments"
+
+
 # ----------------------------------------------------------------------------
 @app.before_request
 def ensure_state():  # pragma: no cover - trivial
@@ -120,6 +170,20 @@ def index() -> str:
     current_playlist = session.get(Playlist, state.playlist_id) if state.playlist_id else None
     current_track = session.get(Track, state.current_track_id) if state.current_track_id else None
     schedules = session.scalars(select(Schedule)).all()
+    now = dt.datetime.now()
+    upcoming = []
+    for schedule in schedules:
+        if not schedule.enabled:
+            continue
+        start_at = next_occurrence(schedule, now)
+        if not start_at:
+            continue
+        upcoming.append({"schedule": schedule, "start_at": start_at})
+    upcoming.sort(key=lambda item: item["start_at"])
+    upcoming = upcoming[:4]
+    track_count = session.scalar(select(func.count(Track.id))) or 0
+    playlist_count = len(playlists)
+    enabled_schedules = sum(1 for schedule in schedules if schedule.enabled)
     return render_template(
         "index.html",
         config=config,
@@ -128,6 +192,12 @@ def index() -> str:
         current_playlist=current_playlist,
         current_track=current_track,
         schedules=schedules,
+        upcoming=upcoming,
+        stats={
+            "tracks": track_count,
+            "playlists": playlist_count,
+            "schedules": enabled_schedules,
+        },
     )
 
 
@@ -295,6 +365,10 @@ def toggle_schedule(schedule_id: int) -> Response:
         schedule.enabled = not schedule.enabled
         session.commit()
         log(session, "info", "Schedule toggled", {"schedule_id": schedule_id, "enabled": schedule.enabled})
+        if request.accept_mimetypes.best == "application/json":
+            return jsonify({"enabled": schedule.enabled, "schedule_id": schedule.id})
+    if request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Schedule not found"}), 404
     return redirect(url_for("schedules_view"))
 
 

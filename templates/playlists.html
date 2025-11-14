@@ -1,82 +1,95 @@
 {% extends "layout.html" %}
 {% block title %}Playlists • auto_break_player{% endblock %}
 {% block content %}
-<div class="grid gap-8 lg:grid-cols-3">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body space-y-4">
-      <h2 class="card-title">Create playlist</h2>
-      <form method="post" class="space-y-4">
-        <input type="text" name="name" class="input input-bordered w-full" placeholder="Playlist name" required />
-        <button class="btn btn-primary" type="submit">Create</button>
-      </form>
-      <div class="divider">Existing</div>
-      <ul class="space-y-2">
-        {% for playlist in playlists %}
-          <li>
-            <a href="{{ url_for('edit_playlist', playlist_id=playlist.id) }}" class="btn btn-sm w-full {{ 'btn-primary' if active_playlist and active_playlist.id == playlist.id else 'btn-outline' }}">
-              {{ playlist.name }}
-            </a>
-          </li>
-        {% else %}
-          <li class="opacity-70">No playlists yet.</li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
-  <div class="card bg-base-100 shadow lg:col-span-2">
-    <div class="card-body space-y-4">
-      {% if active_playlist %}
-        <h2 class="card-title">{{ active_playlist.name }}</h2>
-        <form method="post" action="{{ url_for('edit_playlist', playlist_id=active_playlist.id) }}" class="grid gap-4 md:grid-cols-2">
-          <label class="form-control">
-            <div class="label"><span class="label-text">Track</span></div>
-            <select class="select select-bordered" name="track_id" required>
-              <option value="" disabled selected>Select track</option>
-              {% for track in tracks %}
-                <option value="{{ track.id }}">{{ track.orig_filename }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label class="form-control">
-            <div class="label"><span class="label-text">Position</span></div>
-            <input type="number" name="position" class="input input-bordered" value="0" />
-          </label>
-          <div class="md:col-span-2">
-            <button class="btn btn-primary" type="submit">Add to playlist</button>
-          </div>
+<section class="space-y-8">
+  <header class="bg-base-100/80 border border-base-300 rounded-3xl p-8 shadow-xl">
+    <h1 class="text-3xl font-semibold mb-2">Playlists</h1>
+    <p class="text-sm opacity-70">Curate themed sets for the different parts of your day. Drag in more music as you go.</p>
+  </header>
+  <div class="grid gap-8 lg:grid-cols-3">
+    <div class="card bg-base-100/90 shadow-xl border border-base-300">
+      <div class="card-body space-y-4">
+        <h2 class="card-title">Create playlist</h2>
+        <form method="post" class="space-y-4">
+          <input type="text" name="name" class="input input-bordered w-full" placeholder="Playlist name" required />
+          <button class="btn btn-primary w-full" type="submit">Create</button>
         </form>
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Track</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for entry in entries %}
+        <div class="divider">Existing</div>
+        <ul class="space-y-2 max-h-64 overflow-y-auto pr-1">
+          {% for playlist in playlists %}
+            <li>
+              <a
+                href="{{ url_for('edit_playlist', playlist_id=playlist.id) }}"
+                class="btn btn-sm w-full {{ 'btn-primary' if active_playlist and active_playlist.id == playlist.id else 'btn-outline' }}"
+              >
+                {{ playlist.name }}
+              </a>
+            </li>
+          {% else %}
+            <li class="opacity-70">No playlists yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="card bg-base-100/90 shadow-xl border border-base-300 lg:col-span-2">
+      <div class="card-body space-y-6">
+        {% if active_playlist %}
+          <div class="flex items-center justify-between gap-4 flex-wrap">
+            <h2 class="card-title">{{ active_playlist.name }}</h2>
+            <span class="badge badge-outline">{{ entries|length }} tracks</span>
+          </div>
+          <form method="post" action="{{ url_for('edit_playlist', playlist_id=active_playlist.id) }}" class="grid gap-4 md:grid-cols-3">
+            <label class="form-control md:col-span-2">
+              <div class="label"><span class="label-text">Track</span></div>
+              <select class="select select-bordered" name="track_id" required>
+                <option value="" disabled selected>Select track</option>
+                {% for track in tracks %}
+                  <option value="{{ track.id }}">{{ track.orig_filename }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="form-control">
+              <div class="label"><span class="label-text">Position</span></div>
+              <input type="number" name="position" class="input input-bordered" value="0" />
+            </label>
+            <div class="md:col-span-3 flex flex-wrap gap-2">
+              <button class="btn btn-primary" type="submit">Add to playlist</button>
+              <a href="{{ url_for('upload') }}" class="btn btn-outline">Upload more tracks</a>
+            </div>
+          </form>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
                 <tr>
-                  <td>{{ entry.position }}</td>
-                  <td>{{ entry.track.orig_filename if entry.track else '—' }}</td>
-                  <td>
-                    <form method="post" action="{{ url_for('remove_playlist_entry', playlist_id=active_playlist.id, entry_id=entry.id) }}">
-                      <button class="btn btn-xs btn-outline" type="submit">Remove</button>
-                    </form>
-                  </td>
+                  <th>#</th>
+                  <th>Track</th>
+                  <th></th>
                 </tr>
-              {% else %}
-                <tr>
-                  <td colspan="3" class="text-center opacity-70">No tracks in playlist.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <div class="text-center py-16 opacity-70">Select a playlist to manage tracks.</div>
-      {% endif %}
+              </thead>
+              <tbody>
+                {% for entry in entries %}
+                  <tr>
+                    <td>{{ entry.position }}</td>
+                    <td>{{ entry.track.orig_filename if entry.track else '—' }}</td>
+                    <td>
+                      <form method="post" action="{{ url_for('remove_playlist_entry', playlist_id=active_playlist.id, entry_id=entry.id) }}">
+                        <button class="btn btn-xs btn-outline" type="submit">Remove</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="3" class="text-center opacity-70">No tracks in playlist.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-16 opacity-70">Select a playlist to manage tracks.</div>
+        {% endif %}
+      </div>
     </div>
   </div>
-</div>
+</section>
 {% endblock %}

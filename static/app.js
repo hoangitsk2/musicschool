@@ -95,11 +95,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  document.querySelectorAll("form[data-toggle-schedule]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button");
+      const originalText = button ? button.textContent : "";
+      const originalClasses = button ? button.className : "";
+      try {
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Updating...";
+        }
+        const response = await fetch(form.action, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        if (!response.ok) {
+          throw new Error("Unable to update schedule");
+        }
+        const data = await response.json();
+        if (button) {
+          button.disabled = false;
+          button.textContent = data.enabled ? "Enabled" : "Disabled";
+          button.className = `btn btn-xs ${data.enabled ? "btn-success" : "btn-outline"}`;
+        }
+        toast(`Schedule ${data.enabled ? "enabled" : "disabled"}`);
+      } catch (error) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+          button.className = originalClasses;
+        }
+        toast(error.message || "Failed to toggle schedule", true);
+      }
+    });
+  });
+
+  function formatTime(value) {
+    if (!value) {
+      return "—";
+    }
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return value;
+  }
+
   async function refreshStatus() {
     try {
       const data = await api("status", {}, "GET");
       if (statusText) {
-        statusText.textContent = (data.status || "idle").toUpperCase();
+        const status = data.status || "idle";
+        statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
       }
       if (volumeValue) {
         volumeValue.textContent = data.volume;
@@ -108,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
         powerValue.textContent = data.power_on ? "ON" : "OFF";
       }
       if (sessionEnd) {
-        sessionEnd.textContent = data.session_end_at || "—";
+        sessionEnd.textContent = formatTime(data.session_end_at);
       }
       if (volumeSlider) {
         volumeSlider.value = data.volume;

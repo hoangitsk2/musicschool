@@ -1,129 +1,188 @@
 {% extends "layout.html" %}
 {% block title %}Dashboard • auto_break_player{% endblock %}
 {% block content %}
-<section class="grid gap-6 lg:grid-cols-3">
-  <div class="stats shadow bg-base-100 col-span-1">
-    <div class="stat">
-      <div class="stat-title">Status</div>
-      <div class="stat-value" id="status-text">{{ state.status|capitalize }}</div>
-      <div class="stat-desc">Heartbeat {{ state.heartbeat_at or '—' }}</div>
+<div class="hero bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 text-white shadow-xl">
+  <div class="hero-content flex-col lg:flex-row gap-8">
+    <div class="flex-1 space-y-4">
+      <h1 class="text-3xl md:text-4xl font-bold tracking-tight">Raspberry Pi music hub</h1>
+      <p class="text-base-content/80 text-white/80">
+        Keep your campus or studio on schedule with an always-on music system. Control playback, upload new tracks, and arm
+        automatic schedules from any device on the network.
+      </p>
+      <div class="flex flex-wrap gap-4">
+        <a href="{{ url_for('upload') }}" class="btn btn-secondary">Manage tracks</a>
+        <a href="{{ url_for('playlists') }}" class="btn btn-outline">Build playlists</a>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div class="glass rounded-2xl p-4">
+        <p class="text-xs uppercase tracking-wide text-white/60">Tracks</p>
+        <p class="text-3xl font-semibold">{{ stats.tracks }}</p>
+        <p class="text-xs text-white/60">stored locally</p>
+      </div>
+      <div class="glass rounded-2xl p-4">
+        <p class="text-xs uppercase tracking-wide text-white/60">Playlists</p>
+        <p class="text-3xl font-semibold">{{ stats.playlists }}</p>
+        <p class="text-xs text-white/60">ready to play</p>
+      </div>
+      <div class="glass rounded-2xl p-4">
+        <p class="text-xs uppercase tracking-wide text-white/60">Schedules</p>
+        <p class="text-3xl font-semibold">{{ stats.schedules }}</p>
+        <p class="text-xs text-white/60">active of {{ schedules|length }} total</p>
+      </div>
+      <div class="glass rounded-2xl p-4 col-span-3">
+        <p class="text-xs uppercase tracking-wide text-white/60">Status</p>
+        <p class="text-2xl font-semibold" id="status-text">{{ state.status|capitalize }}</p>
+        <p class="text-sm text-white/60">Heartbeat {{ state.heartbeat_at or '—' }}</p>
+      </div>
     </div>
   </div>
-  <div class="stats shadow bg-base-100 col-span-1">
-    <div class="stat">
-      <div class="stat-title">Volume</div>
-      <div class="stat-value" id="volume-value">{{ state.volume }}</div>
-      <div class="stat-desc">Default {{ config.volume_default }}</div>
-    </div>
-  </div>
-  <div class="stats shadow bg-base-100 col-span-1">
-    <div class="stat">
-      <div class="stat-title">Power</div>
-      <div class="stat-value" id="power-value">{{ 'ON' if state.power_on else 'OFF' }}</div>
-      <div class="stat-desc">Relay status</div>
-    </div>
-  </div>
-</section>
+</div>
 
-<section class="mt-8 grid gap-6 lg:grid-cols-3">
-  <div class="card bg-base-100 shadow col-span-2">
-    <div class="card-body space-y-4">
-      <h2 class="card-title">Session Control</h2>
-      <form id="play-form" class="grid gap-4 md:grid-cols-2">
-        <label class="form-control w-full">
-          <div class="label"><span class="label-text">Playlist</span></div>
-          <select name="playlist_id" class="select select-bordered" required>
-            <option value="" disabled selected>Select playlist</option>
-            {% for playlist in playlists %}
-              <option value="{{ playlist.id }}" {% if playlist.id == state.playlist_id %}selected{% endif %}>{{ playlist.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="form-control w-full">
-          <div class="label"><span class="label-text">Session length (minutes)</span></div>
-          <input type="number" name="minutes" min="1" class="input input-bordered" value="{{ config.session_default_minutes }}" />
-        </label>
-        <div class="md:col-span-2 flex flex-wrap gap-2">
-          <button class="btn btn-primary" type="submit">Play</button>
-          <button class="btn btn-error" data-action="stop" type="button">Stop</button>
-          <button class="btn btn-secondary" data-action="skip" type="button">Skip</button>
+<section class="mt-10 grid gap-6 xl:grid-cols-3">
+  <div class="xl:col-span-2 grid gap-6">
+    <div class="card bg-base-100/90 shadow-xl border border-base-300">
+      <div class="card-body space-y-6">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <h2 class="card-title">Session control</h2>
+          <div class="badge badge-primary badge-outline">Live</div>
         </div>
-      </form>
-      <div>
-        <label class="form-control">
-          <div class="label"><span class="label-text">Volume</span></div>
-          <input
-            id="volume-slider"
-            type="range"
-            min="0"
-            max="100"
-            value="{{ state.volume }}"
-            class="range range-primary"
-          />
-        </label>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn" data-power="on">Power ON</button>
-        <button class="btn" data-power="off">Power OFF</button>
+        <form id="play-form" class="grid gap-4 md:grid-cols-3">
+          <label class="form-control md:col-span-2">
+            <div class="label"><span class="label-text">Playlist</span></div>
+            <select name="playlist_id" class="select select-bordered" required>
+              <option value="" disabled selected>Select playlist</option>
+              {% for playlist in playlists %}
+                <option value="{{ playlist.id }}" {% if playlist.id == state.playlist_id %}selected{% endif %}>{{ playlist.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="form-control">
+            <div class="label"><span class="label-text">Session length (minutes)</span></div>
+            <input type="number" name="minutes" min="1" class="input input-bordered" value="{{ config.session_default_minutes }}" />
+          </label>
+          <div class="md:col-span-3 flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="submit">Play</button>
+            <button class="btn btn-error" data-action="stop" type="button">Stop</button>
+            <button class="btn btn-neutral" data-action="skip" type="button">Skip</button>
+          </div>
+        </form>
+        <div class="grid gap-4 md:grid-cols-2">
+          <label class="form-control">
+            <div class="label"><span class="label-text">Volume (<span id="volume-value">{{ state.volume }}</span>)</span></div>
+            <input
+              id="volume-slider"
+              type="range"
+              min="0"
+              max="100"
+              value="{{ state.volume }}"
+              class="range range-primary"
+            />
+          </label>
+          <div class="bg-base-200/60 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p class="text-sm opacity-70">Amplifier power</p>
+              <p class="text-lg font-semibold" id="power-value">{{ 'ON' if state.power_on else 'OFF' }}</p>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm" data-power="on">Power ON</button>
+              <button class="btn btn-sm btn-outline" data-power="off">Power OFF</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="card bg-base-100 shadow">
-    <div class="card-body space-y-4">
-      <h2 class="card-title">Now Playing</h2>
-      <div>
-        <p class="text-sm opacity-70">Playlist</p>
-        <p class="text-lg font-semibold">{{ current_playlist.name if current_playlist else '—' }}</p>
-      </div>
-      <div>
-        <p class="text-sm opacity-70">Track</p>
-        <p class="text-lg font-semibold">{{ current_track.orig_filename if current_track else '—' }}</p>
-      </div>
-      <div>
-        <p class="text-sm opacity-70">Session ends</p>
-        <p class="text-lg" id="session-end">{{ state.session_end_at or '—' }}</p>
-      </div>
-    </div>
-  </div>
-</section>
 
-<section class="mt-8">
-  <h2 class="text-xl font-semibold mb-4">Schedules</h2>
-  <div class="overflow-x-auto">
-    <table class="table table-zebra">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Playlist</th>
-          <th>Days</th>
-          <th>Start</th>
-          <th>Minutes</th>
-          <th>Enabled</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for schedule in schedules %}
-          <tr>
-            <td>{{ schedule.name }}</td>
-            <td>{{ schedule.playlist.name if schedule.playlist else '—' }}</td>
-            <td>{{ schedule.days }}</td>
-            <td>{{ schedule.start_time }}</td>
-            <td>{{ schedule.session_minutes }}</td>
-            <td>
-              <form method="post" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}">
-                <button class="btn btn-xs {{ 'btn-success' if schedule.enabled else 'btn-outline' }}" type="submit">
-                  {{ 'Enabled' if schedule.enabled else 'Disabled' }}
-                </button>
-              </form>
-            </td>
-          </tr>
-        {% else %}
-          <tr>
-            <td colspan="6" class="text-center opacity-70">No schedules defined.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="card bg-base-100/90 shadow-xl border border-base-300">
+      <div class="card-body">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="card-title">Schedules overview</h2>
+          <a href="{{ url_for('schedules_view') }}" class="btn btn-sm btn-outline">Manage schedules</a>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="table table-zebra">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Playlist</th>
+                <th>Days</th>
+                <th>Start</th>
+                <th>Minutes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for schedule in schedules %}
+                <tr>
+                  <td>{{ schedule.name }}</td>
+                  <td>{{ schedule.playlist.name if schedule.playlist else '—' }}</td>
+                  <td>{{ schedule.days|days_human }}</td>
+                  <td>{{ schedule.start_time|human_time }}</td>
+                  <td>{{ schedule.session_minutes }}</td>
+                  <td>
+                    <form method="post" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}" data-toggle-schedule>
+                      <button class="btn btn-xs {{ 'btn-success' if schedule.enabled else 'btn-outline' }}" type="submit">
+                        {{ 'Enabled' if schedule.enabled else 'Disabled' }}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="6" class="text-center opacity-70">No schedules defined yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card bg-base-100/90 shadow-xl border border-base-300">
+      <div class="card-body space-y-4">
+        <h2 class="card-title">Now playing</h2>
+        <div class="rounded-2xl bg-base-200/60 p-4 space-y-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide opacity-70">Playlist</p>
+            <p class="text-lg font-semibold">{{ current_playlist.name if current_playlist else '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wide opacity-70">Track</p>
+            <p class="text-lg font-semibold">{{ current_track.orig_filename if current_track else '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wide opacity-70">Session ends</p>
+            <p class="text-lg" id="session-end">{{ state.session_end_at|human_time }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100/90 shadow-xl border border-base-300">
+      <div class="card-body space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="card-title">Upcoming schedules</h2>
+          <span class="badge badge-outline">{{ upcoming|length }} queued</span>
+        </div>
+        <div class="space-y-4">
+          {% for item in upcoming %}
+            <div class="rounded-xl border border-base-300 p-4 flex flex-col gap-1 bg-base-200/50">
+              <div class="flex items-center justify-between gap-2">
+                <p class="font-semibold">{{ item.schedule.name }}</p>
+                <span class="badge badge-primary badge-outline">{{ item.schedule.start_time|human_time }}</span>
+              </div>
+              <p class="text-sm opacity-70">{{ item.schedule.playlist.name if item.schedule.playlist else '—' }} • {{ item.schedule.session_minutes }} min</p>
+              <p class="text-xs opacity-60">{{ item.schedule.days|days_human }}</p>
+              <p class="text-xs uppercase tracking-wide opacity-60">{{ item.start_at|human_delta }}</p>
+            </div>
+          {% else %}
+            <p class="text-sm opacity-70">No enabled schedules yet. Create one to start music automatically.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 {% endblock %}

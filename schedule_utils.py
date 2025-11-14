@@ -1,6 +1,7 @@
 """Shared helpers for working with playback schedules."""
 from __future__ import annotations
 
+import datetime as dt
 from typing import Iterable, List
 
 from sqlalchemy import select
@@ -32,6 +33,8 @@ DAY_ALIASES = {
     "SAT": 5,
     "SATURDAY": 5,
 }
+
+DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _parse_single_day(token: str) -> int:
@@ -91,6 +94,73 @@ def normalise_days(days: object | None) -> str:
     return ",".join(str(item) for item in unique_sorted)
 
 
+def parse_day_string(days: str | None) -> List[int]:
+    if not days:
+        return list(range(7))
+    try:
+        parsed = [int(item.strip()) for item in days.split(",") if item.strip() != ""]
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Invalid day entry in '{days}'") from exc
+    if not parsed:
+        return list(range(7))
+    for value in parsed:
+        if value < 0 or value > 6:
+            raise ValueError(f"Day value must be between 0 and 6, got {value}")
+    return sorted(set(parsed))
+
+
+def describe_days(days: str | None) -> str:
+    parsed = parse_day_string(days)
+    if len(parsed) == 7:
+        return "Every day"
+    if parsed == list(range(5)):
+        return "Weekdays"
+    if parsed == [5, 6]:
+        return "Weekend"
+    if not parsed:
+        return "—"
+
+    def _label_for_group(start: int, end: int) -> str:
+        if start == end:
+            return DAY_LABELS[start]
+        if end == start + 1:
+            return f"{DAY_LABELS[start]} – {DAY_LABELS[end]}"
+        return f"{DAY_LABELS[start]} – {DAY_LABELS[end]}"
+
+    groups: List[List[int]] = []
+    for value in parsed:
+        if not groups or value != groups[-1][-1] + 1:
+            groups.append([value, value])
+        else:
+            groups[-1][-1] = value
+    labels = [_label_for_group(group[0], group[1]) for group in groups]
+    return ", ".join(labels)
+
+
+def next_occurrence(schedule, reference: dt.datetime | None = None) -> dt.datetime | None:
+    if reference is None:
+        reference = dt.datetime.now()
+    days = parse_day_string(getattr(schedule, "days", None))
+    if not days:
+        return None
+    start_time = getattr(schedule, "start_time", "00:00") or "00:00"
+    try:
+        hour, minute = [int(part) for part in start_time.split(":", 1)]
+    except ValueError:
+        return None
+    start_time_obj = dt.time(hour=hour, minute=minute)
+    reference = reference.replace(second=0, microsecond=0)
+
+    for offset in range(14):
+        candidate_date = reference.date() + dt.timedelta(days=offset)
+        if candidate_date.weekday() not in days:
+            continue
+        candidate = dt.datetime.combine(candidate_date, start_time_obj)
+        if candidate >= reference:
+            return candidate
+    return None
+
+
 def resolve_playlist(session: Session, identifier: object) -> Playlist:
     """Resolve a playlist by id or exact name."""
     if isinstance(identifier, Playlist):
@@ -116,4 +186,12 @@ def resolve_playlist(session: Session, identifier: object) -> Playlist:
     return playlist
 
 
-__all__ = ["DAY_ALIASES", "normalise_days", "resolve_playlist"]
+__all__ = [
+    "DAY_ALIASES",
+    "DAY_LABELS",
+    "normalise_days",
+    "parse_day_string",
+    "describe_days",
+    "next_occurrence",
+    "resolve_playlist",
+]

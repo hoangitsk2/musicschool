@@ -1,0 +1,22 @@
+:root {
+  color-scheme: dark;
+}
+
+.hero .glass {
+  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+}
+
+label.btn input[type="checkbox"].peer {
+  position: absolute;
+  opacity: 0;
+}
+
+label.btn input[type="checkbox"].peer + span {
+  transition: color 0.2s ease, font-weight 0.2s ease;
+}
+
+.toast {
+  z-index: 9999;
+}
