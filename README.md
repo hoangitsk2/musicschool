@@ -25,7 +25,6 @@ auto_break_player/
 ├─ config.py                  # Default settings and YAML loader
 ├─ config.yaml.example        # Sample configuration
 ├─ requirements.txt           # Linux/Raspberry Pi dependencies
-├─ requirements-win.txt       # Windows development dependencies
 ├─ gui_spotify.py             # Tkinter desktop controller (dark style)
 ├─ scripts/
 │  └─ migrate_db.py           # Create database & ensure state row
@@ -42,23 +41,7 @@ auto_break_player/
 
 1. Copy `config.yaml.example` to `config.yaml` and adjust settings.
 2. Ensure `music_dir` and `logs_dir` exist or will be created by the app.
-3. On Windows development, set `vlc_backend: dummy` and `gpio.enabled: false`.
-
-## Setup (Windows / development)
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements-win.txt
-copy config.yaml.example config.yaml
-python scripts\migrate_db.py
-python app.py  # terminal 1
-python playback_daemon.py  # terminal 2
-# optional GUI controller
-python gui_spotify.py
-```
-
-Open the dashboard at <http://127.0.0.1:8000>.
+3. (Optional) Define `bootstrap_schedules` in `config.yaml` to auto-create recurring playback slots when the daemon starts.
 
 ## Setup (Raspberry Pi / Linux)
 
@@ -82,10 +65,42 @@ sudo systemctl enable --now auto_break_player.service
 sudo systemctl enable --now auto_break_player-daemon.service
 ```
 
+### Command-line schedule helper
+
+For headless deployments you can manage schedules without opening the web UI
+by using the helper script:
+
+```bash
+python scripts/schedule_cli.py list
+python scripts/schedule_cli.py add --name "Morning" --playlist "Morning Mix" --time 08:00 --minutes 15 --days Mon-Fri
+python scripts/schedule_cli.py disable 2
+```
+
+The script accepts playlist identifiers or exact playlist names, supports day
+aliases such as `Mon-Fri`, `Weekend`, or `Fri-Mon`, and defaults to scheduling
+every day when `--days` is omitted.
+
+### Automatic schedules from configuration
+
+Define `bootstrap_schedules` in `config.yaml` to have the playback daemon create or update schedules automatically whenever it boots.
+Each entry accepts a schedule `name`, the target `playlist` (id or exact name), the start `time`, optional `minutes`, `days`, and `enabled` flag.
+
+```yaml
+bootstrap_schedules:
+  - name: Morning Bell
+    playlist: Morning Playlist
+    time: "08:00"
+    days: Mon-Fri
+    minutes: 20
+```
+
+`days` uses the same syntax as the CLI helper, so aliases like `Weekend` or `Fri-Mon` are supported.
+
 ## Testing
 
 ```bash
-pip install -r requirements-win.txt  # contains pytest for convenience
+pip install -r requirements.txt
+pip install pytest
 pytest
 ```
 

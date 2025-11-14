@@ -27,6 +27,7 @@ DEFAULTS: Dict[str, Any] = {
     "ui": {
         "theme": "dark",
     },
+    "bootstrap_schedules": [],
 }
 
 
