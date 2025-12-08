@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Raspberry Pi Break DJ</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__content">
+        <h1>Raspberry Pi Break DJ</h1>
+        <p>Schedule upbeat playlists for school breaks and trigger them remotely.</p>
+      </div>
+    </header>
+    <main>
+      <section class="card" id="connection-card">
+        <h2>Connect to your Pi</h2>
+        <p>
+          Enter the public URL of the Raspberry Pi API. The value is saved in your
+          browser so the dashboard keeps working from GitHub Pages.
+        </p>
+        <form id="connection-form" class="form-grid">
+          <label for="api-base">API base URL</label>
+          <input
+            id="api-base"
+            name="apiBase"
+            type="url"
+            placeholder="https://pi-school.example.com"
+            required
+          />
+          <button type="submit">Save &amp; Refresh</button>
+        </form>
+        <p class="muted">
+          Current target: <span id="current-api-base">not configured</span>
+        </p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <div class="card__header">
+            <h2>Live status</h2>
+            <span class="pill pill--idle" id="status-pill">Idle</span>
+          </div>
+          <dl class="status-list" id="status-list">
+            <div><dt>Power</dt><dd id="status-power">–</dd></div>
+            <div><dt>Playback</dt><dd id="status-playback">–</dd></div>
+            <div><dt>Track</dt><dd id="status-track">–</dd></div>
+            <div><dt>Volume</dt><dd id="status-volume">–</dd></div>
+            <div><dt>Updated</dt><dd id="status-updated">–</dd></div>
+          </dl>
+          <div class="button-row">
+            <button data-action="power">Toggle Power</button>
+            <button data-action="refresh">Refresh</button>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Now playing controls</h2>
+          <div class="now-playing">
+            <div class="now-playing__art" id="now-playing-art" aria-hidden="true"></div>
+            <div class="now-playing__meta">
+              <h3 id="now-playing-title">Chưa có bản nhạc</h3>
+              <p id="now-playing-subtitle">Chọn playlist và thời lượng để bắt đầu bữa tiệc giờ ra chơi.</p>
+            </div>
+          </div>
+          <div class="button-row">
+            <button data-action="play" class="accent">Play Selected Playlist</button>
+            <button data-action="stop">Stop</button>
+            <button data-action="skip">Skip</button>
+          </div>
+          <label for="playlist-select" class="form-label">Playlist</label>
+          <select id="playlist-select"></select>
+          <label for="play-minutes" class="form-label">Duration (minutes)</label>
+          <input id="play-minutes" type="number" min="1" max="120" value="15" />
+          <label for="volume-slider" class="form-label">Volume</label>
+          <input id="volume-slider" type="range" min="0" max="100" value="70" />
+          <output id="volume-output">70</output>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Break planner</h2>
+        <p>
+          Configure recurring breaks by choosing days of the week, start times, and a
+          playlist. The Pi will power on automatically and shut down when the break ends.
+        </p>
+        <form id="break-form" class="form-grid">
+          <label for="break-name">Plan name</label>
+          <input id="break-name" type="text" placeholder="Morning Break" />
+
+          <label for="break-playlist">Playlist</label>
+          <select id="break-playlist"></select>
+
+          <label for="break-duration">Duration (minutes)</label>
+          <input id="break-duration" type="number" min="1" max="60" value="15" />
+
+          <label>Days</label>
+          <div class="checkbox-group" id="break-days"></div>
+
+          <label for="break-times">Start times (HH:MM)</label>
+          <textarea
+            id="break-times"
+            placeholder="09:15\n14:30"
+            rows="3"
+          ></textarea>
+
+          <label for="break-replace">Replace existing?</label>
+          <select id="break-replace">
+            <option value="no" selected>Keep existing schedules</option>
+            <option value="yes">Replace schedules created by this plan</option>
+          </select>
+
+          <button type="submit" class="accent">Schedule breaks</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Upcoming schedules</h2>
+        <p class="muted">
+          Toggle individual schedules if you need to pause a specific break without
+          removing the plan.
+        </p>
+        <div id="schedule-list" class="schedule-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Messages</h2>
+        <ul id="message-log" class="message-log"></ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Deploy this folder to GitHub Pages and keep your Raspberry Pi API online. All
+        requests stay in your browser and talk directly to the Pi.
+      </p>
+    </footer>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

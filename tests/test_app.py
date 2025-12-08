@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import importlib
+import io
 import sys
 from pathlib import Path
 
 import pytest
 
 from config import load_config
-from models import Base, Command, Playlist, PlaylistTrack, Track, ensure_state_row, make_engine
-from player import DummyPlayer
+from models import Base, Command, Playlist, PlaylistTrack, Schedule, Track, ensure_state_row, make_engine
+from player import CVLCPlayer, DummyPlayer, make_player
+import player as player_module
 from sqlalchemy import select
 
 
@@ -24,6 +26,28 @@ def test_config_load():
     assert "session_default_minutes" in cfg
 
 
+def test_cors_allows_any_origin(app_module, client):
+    response = client.options("/api/status", headers={"Origin": "https://example.com"})
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "*"
+    assert "GET" in response.headers["Access-Control-Allow-Methods"]
+    assert response.headers["Access-Control-Allow-Headers"] == "Content-Type"
+
+
+def test_cors_restricts_to_configured_origins(app_module, client):
+    original_origins = app_module._CORS_ORIGINS
+    try:
+        app_module._CORS_ORIGINS = ("https://allowed.example",)
+        disallowed = client.get("/api/status", headers={"Origin": "https://blocked.example"})
+        assert "Access-Control-Allow-Origin" not in disallowed.headers
+
+        allowed = client.get("/api/status", headers={"Origin": "https://allowed.example"})
+        assert allowed.headers["Access-Control-Allow-Origin"] == "https://allowed.example"
+        assert "Origin" in allowed.headers.get("Vary", "")
+    finally:
+        app_module._CORS_ORIGINS = original_origins
+
+
 def test_player_dummy():
     player = DummyPlayer()
     player.load_playlist(["track1.mp3", "track2.mp3"])
@@ -33,10 +57,80 @@ def test_player_dummy():
     assert player.current_index() == 1
     player.stop()
     assert not player.is_playing()
-    from player import make_player
-
     auto_player = make_player("dummy")
     assert isinstance(auto_player, DummyPlayer)
+
+
+def test_player_cvlc_instantiation(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc"
+    fake_vlc.write_text("#!/bin/sh\nexit 0\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
+    player = make_player("cvlc")
+    assert isinstance(player, CVLCPlayer)
+
+
+def test_cvlc_issues_play_command(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc.exe"
+    fake_vlc.write_text("@echo off\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
+
+    launched = {}
+
+    class DummyProc:
+        def __init__(self, args, **kwargs):
+            launched["args"] = args
+            self.stdin = None
+
+        def poll(self):
+            return None
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(player_module.subprocess, "Popen", lambda *a, **k: DummyProc(*a, **k))
+    monkeypatch.setattr(CVLCPlayer, "_ensure_thread", lambda self: None)
+
+    player = CVLCPlayer()
+    player.load_playlist(["track-one.mp3"])
+    player.play()
+
+    args = launched["args"]
+    assert "--intf" in args and "dummy" in args
+    assert "--no-video" in args
+
+    first = player._commands.get_nowait()
+    second = player._commands.get_nowait()
+    assert first.startswith("volume ")
+    assert second == "play"
+
+
+def test_cvlc_adds_fake_tty_on_windows(monkeypatch, tmp_path):
+    fake_vlc = tmp_path / "vlc.exe"
+    fake_vlc.write_text("@echo off\n")
+    monkeypatch.setenv("CVLC_PATH", str(fake_vlc))
+
+    launched = {}
+
+    class DummyProc:
+        def __init__(self, args, **kwargs):
+            launched["args"] = args
+            self.stdin = None
+
+        def poll(self):
+            return None
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(player_module.subprocess, "Popen", lambda *a, **k: DummyProc(*a, **k))
+    monkeypatch.setattr(CVLCPlayer, "_ensure_thread", lambda self: None)
+    monkeypatch.setattr(CVLCPlayer, "_needs_fake_tty", lambda self: True)
+
+    player = CVLCPlayer()
+    player.load_playlist(["track-one.mp3"])
+    player.play()
+
+    assert "--rc-fake-tty" in launched["args"]
 
 
 @pytest.fixture(scope="session")
@@ -156,3 +250,104 @@ def test_api_tracks_and_preview(app_module, client):
             select(Command).where(Command.type == "PREVIEW").order_by(Command.created_at.desc())
         ).first()
         assert command is not None
+
+
+def test_api_tracks_upload_and_delete(app_module, client):
+    data = {
+        "files": (io.BytesIO(b"fake data"), "upload.mp3"),
+    }
+    response = client.post("/api/tracks", data=data, content_type="multipart/form-data")
+    assert response.status_code == 201
+    data = response.get_json()
+    uploaded = data["uploaded"][0]
+
+    delete_response = client.delete(f"/api/tracks/{uploaded['id']}")
+    assert delete_response.status_code == 200
+
+
+def test_api_playlist_management(app_module, client):
+    playlist_response = client.post("/api/playlists", json={"name": "Gym"})
+    assert playlist_response.status_code == 201
+    playlist_id = playlist_response.get_json()["id"]
+
+    with app_module.SessionLocal() as session:
+        track = _add_track(session, "gym.mp3")
+
+    add_response = client.post(
+        f"/api/playlists/{playlist_id}/tracks",
+        json={"track_id": track.id, "position": 0},
+    )
+    assert add_response.status_code == 201
+    entry_id = add_response.get_json()["entry_id"]
+
+    detail_response = client.get(f"/api/playlists/{playlist_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.get_json()
+    assert any(item["entry_id"] == entry_id for item in detail["tracks"])
+
+    delete_entry = client.delete(f"/api/playlists/{playlist_id}/tracks/{entry_id}")
+    assert delete_entry.status_code == 200
+
+
+def test_api_schedule_management(app_module, client):
+    with app_module.SessionLocal() as session:
+        playlist = _add_playlist(session, "Focus")
+
+    create_response = client.post(
+        "/api/schedules",
+        json={
+            "name": "Morning",
+            "playlist_id": playlist.id,
+            "days": ["0", "1"],
+            "start_time": "08:00",
+            "session_minutes": 20,
+            "enabled": True,
+        },
+    )
+    assert create_response.status_code == 201
+    schedule_id = create_response.get_json()["id"]
+
+    list_response = client.get("/api/schedules")
+    assert list_response.status_code == 200
+    schedules = list_response.get_json()
+    assert any(item["id"] == schedule_id for item in schedules)
+
+    toggle_response = client.post(f"/api/schedules/{schedule_id}/toggle")
+    assert toggle_response.status_code == 200
+
+
+def test_break_plan_helper_and_api(app_module, client):
+    with app_module.SessionLocal() as session:
+        playlist = _add_playlist(session, "Recess")
+        track = _add_track(session, "bell.mp3")
+        _link_track(session, playlist, track)
+        result = app_module.apply_break_plan(
+            session,
+            playlist.id,
+            start_times=["09:30", "15:30"],
+            days=["1", "2", "3", "4", "5"],
+            minutes=15,
+            name_prefix="Recess",
+            replace=True,
+        )
+        assert len(result["created"]) == 2
+        created_ids = set(result["created"])  # noqa: F841 - ensure not empty
+
+    response = client.post(
+        "/api/schedules/break-plan",
+        json={
+            "playlist_id": playlist.id,
+            "start_times": ["09:30"],
+            "session_minutes": 20,
+            "days": ["1", "2", "3", "4", "5"],
+            "name_prefix": "Recess",
+            "replace": True,
+        },
+    )
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["updated"]
+
+    with app_module.SessionLocal() as session:
+        schedules = session.scalars(select(Schedule)).all()
+        assert any(not sched.enabled for sched in schedules if sched.start_time == "15:30")
