@@ -1,59 +1,74 @@
 {% extends "layout.html" %}
 {% block title %}Tracks • auto_break_player{% endblock %}
 {% block content %}
-<div class="grid gap-8 lg:grid-cols-2">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body space-y-4">
-      <h2 class="card-title">Upload tracks</h2>
-      <form method="post" enctype="multipart/form-data" class="space-y-4">
-        <input type="file" name="files" multiple class="file-input file-input-bordered w-full" />
-        <button class="btn btn-primary" type="submit">Upload</button>
-      </form>
-      <p class="text-sm opacity-70">Allowed extensions: {{ config.allowed_extensions | join(', ') }}</p>
+<section class="space-y-8">
+  <header class="bg-base-100/80 border border-base-300 rounded-3xl p-8 shadow-xl">
+    <h1 class="text-3xl font-semibold mb-2">Music library</h1>
+    <p class="text-sm opacity-70">Upload background music, bell sounds, or announcements. Files are stored locally on the Raspberry Pi.</p>
+  </header>
+  <div class="grid gap-8 lg:grid-cols-3">
+    <div class="lg:col-span-1">
+      <div class="card bg-base-100/90 shadow-xl border border-base-300">
+        <div class="card-body space-y-4">
+          <h2 class="card-title">Upload tracks</h2>
+          <form method="post" enctype="multipart/form-data" class="space-y-4">
+            <input type="file" name="files" multiple class="file-input file-input-bordered w-full" />
+            <button class="btn btn-primary w-full" type="submit">Upload</button>
+          </form>
+          <p class="text-xs opacity-70">Allowed extensions: {{ config.allowed_extensions | join(', ') }}</p>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h2 class="card-title">Tracks ({{ tracks|length }})</h2>
-      <div class="overflow-x-auto mt-4">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Duration</th>
-              <th>Preview</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for track in tracks %}
-              <tr>
-                <td>{{ track.orig_filename }}</td>
-                <td>{{ track.duration_sec or '—' }}</td>
-                <td>
-                  <audio controls class="w-48">
-                    <source src="{{ url_for('serve_music', filename=track.stored_filename) }}" type="{{ track.content_type or 'audio/mpeg' }}" />
-                    Your browser does not support audio playback.
-                  </audio>
-                  <button class="btn btn-xs btn-primary mt-2" type="button" data-preview="{{ track.id }}">
-                    Play on system
-                  </button>
-                </td>
-                <td>
-                  <form method="post" action="{{ url_for('delete_track', track_id=track.id) }}">
-                    <button class="btn btn-xs btn-outline" type="submit">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            {% else %}
-              <tr>
-                <td colspan="4" class="text-center opacity-70">No tracks uploaded yet.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="lg:col-span-2">
+      <div class="card bg-base-100/90 shadow-xl border border-base-300">
+        <div class="card-body">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 class="card-title">Tracks ({{ tracks|length }})</h2>
+            <a href="{{ url_for('playlists') }}" class="btn btn-sm btn-outline">Add to playlists</a>
+          </div>
+          <div class="overflow-x-auto mt-6">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Duration</th>
+                  <th>Preview</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for track in tracks %}
+                  <tr>
+                    <td class="max-w-xs">
+                      <div class="font-medium truncate" title="{{ track.orig_filename }}">{{ track.orig_filename }}</div>
+                    </td>
+                    <td>{{ track.duration_sec or '—' }}</td>
+                    <td>
+                      <div class="flex flex-col gap-2">
+                        <audio controls class="w-56">
+                          <source src="{{ url_for('serve_music', filename=track.stored_filename) }}" type="{{ track.content_type or 'audio/mpeg' }}" />
+                          Your browser does not support audio playback.
+                        </audio>
+                        <button class="btn btn-xs btn-primary" type="button" data-preview="{{ track.id }}">Play on system</button>
+                      </div>
+                    </td>
+                    <td class="text-right">
+                      <form method="post" action="{{ url_for('delete_track', track_id=track.id) }}">
+                        <button class="btn btn-xs btn-outline" type="submit">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="4" class="text-center opacity-70">No tracks uploaded yet.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 {% endblock %}

@@ -22,6 +22,7 @@ from models import (
     make_session_factory,
 )
 from player import BasePlayer, make_player
+from schedule_utils import normalise_days, resolve_playlist
 from sqlalchemy import select
 
 
@@ -38,6 +39,10 @@ class PlaybackDaemon:
         Base.metadata.create_all(engine)
         self.session_factory = make_session_factory(engine)
 
+        with self.session_factory() as session:
+            ensure_state_row(session)
+            self._apply_bootstrap_schedules(session)
+
         gpio_cfg = config.get("gpio", {})
         self.relay = RelayController(
             enabled=bool(gpio_cfg.get("enabled", False)),
@@ -52,6 +57,99 @@ class PlaybackDaemon:
     # ------------------------------------------------------------------
     def _log(self, session, level: str, message: str, meta: Optional[Dict[str, object]] = None) -> None:
         log(session, level, message, meta or {})
+
+    def _apply_bootstrap_schedules(self, session) -> None:
+        definitions = self.config.get("bootstrap_schedules")
+        if not definitions:
+            return
+        if not isinstance(definitions, list):
+            self._log(
+                session,
+                "warning",
+                "bootstrap_schedules must be a list",
+                {"received_type": type(definitions).__name__},
+            )
+            return
+        for index, entry in enumerate(definitions):
+            if not isinstance(entry, dict):
+                self._log(
+                    session,
+                    "warning",
+                    "Schedule definition must be a mapping",
+                    {"index": index},
+                )
+                continue
+            name = str(entry.get("name", "")).strip()
+            if not name:
+                self._log(session, "warning", "Schedule definition missing name", {"index": index})
+                continue
+            playlist_ref = entry.get("playlist")
+            if playlist_ref is None:
+                self._log(session, "warning", "Schedule definition missing playlist", {"name": name})
+                continue
+            try:
+                playlist = resolve_playlist(session, playlist_ref)
+            except Exception as exc:  # pragma: no cover - defensive
+                self._log(
+                    session,
+                    "warning",
+                    "Playlist for bootstrap schedule not found",
+                    {"name": name, "playlist": playlist_ref, "error": str(exc)},
+                )
+                continue
+            start_time = str(entry.get("time") or entry.get("start_time") or "").strip()
+            if not start_time:
+                self._log(session, "warning", "Schedule definition missing start time", {"name": name})
+                continue
+            raw_minutes = entry.get("minutes", entry.get("session_minutes", self.config.get("session_default_minutes", 15)))
+            try:
+                minutes = max(1, int(raw_minutes))
+            except (TypeError, ValueError):
+                minutes = int(self.config.get("session_default_minutes", 15))
+            try:
+                days = normalise_days(entry.get("days"))
+            except Exception as exc:  # pragma: no cover - defensive
+                self._log(
+                    session,
+                    "warning",
+                    "Invalid days for bootstrap schedule",
+                    {"name": name, "error": str(exc)},
+                )
+                days = normalise_days(None)
+            enabled_value = entry.get("enabled")
+            enabled = bool(enabled_value) if enabled_value is not None else True
+            schedule = session.scalars(select(Schedule).where(Schedule.name == name)).first()
+            if schedule:
+                schedule.playlist_id = playlist.id
+                schedule.days = days
+                schedule.start_time = start_time
+                schedule.session_minutes = minutes
+                schedule.enabled = enabled
+            else:
+                schedule = Schedule(
+                    name=name,
+                    playlist_id=playlist.id,
+                    days=days,
+                    start_time=start_time,
+                    session_minutes=minutes,
+                    enabled=enabled,
+                )
+                session.add(schedule)
+            session.commit()
+            self._log(
+                session,
+                "info",
+                "Bootstrap schedule applied",
+                {
+                    "schedule": name,
+                    "playlist_id": playlist.id,
+                    "start_time": start_time,
+                    "minutes": minutes,
+                    "days": days,
+                    "enabled": enabled,
+                },
+            )
+
 
     def _playlist_files(self, session, playlist_id: int) -> Tuple[List[str], List[int]]:
         stmt = (
